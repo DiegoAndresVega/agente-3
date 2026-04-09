@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "descripcion": "Modelos de trofeo con coordenadas de zona imprimible",
+    "version": "2.0",
+    "nota": "Coordenadas calibradas con Paint sobre fotos reales 1200x1500px"
+  },
+  "modelos": [
+    {
+      "id": "totem_basic",
+      "nombre": "Totem Basic",
+      "material": "madera",
+      "precio_base": 45,
+      "imagen_base": "assets/trophies/Sustain-Awards-BASIC-Totem-3.jpg",
+      "imagen_alternativa": "assets/trophies/Sustain-Awards-BASIC-Totem-5.jpg",
+      "zona_imprimible": {
+        "x": 490,
+        "y": 257,
+        "ancho": 247,
+        "alto": 793,
+        "puntos_homografia": [
+          [
+            490,
+            257
+          ],
+          [
+            737,
+            257
+          ],
+          [
+            737,
+            1050
+          ],
+          [
+            490,
+            1050
+          ]
+        ],
+        "calibrado": true,
+        "metodo_calibracion": "Paint - coordenadas manuales sobre imagen 1200x1500px"
+      },
+      "area_impresion_mm": {
+        "ancho": 100,
+        "alto": 150
+      }
+    },
+    {
+      "id": "placa_a5",
+      "nombre": "Placa A5",
+      "material": "aluminio",
+      "precio_base": 30,
+      "imagen_base": "assets/trophies/placa_a5_placeholder.png",
+      "zona_imprimible": {
+        "x": 60,
+        "y": 50,
+        "ancho": 380,
+        "alto": 280,
+        "puntos_homografia": [
+          [
+            65,
+            55
+          ],
+          [
+            435,
+            50
+          ],
+          [
+            440,
+            325
+          ],
+          [
+            60,
+            330
+          ]
+        ],
+        "calibrado": false,
+        "metodo_calibracion": "placeholder - pendiente calibrar con foto real"
+      },
+      "area_impresion_mm": {
+        "ancho": 148,
+        "alto": 105
+      }
+    }
+  ]
+}

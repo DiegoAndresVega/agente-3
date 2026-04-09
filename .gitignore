@@ -1,0 +1,28 @@
+# Configuración local de Claude Code (puede contener claves API)
+.claude/
+
+# Entorno virtual Python
+venv/
+
+# Imágenes generadas (mockups de salida)
+outputs/mockups/
+
+# Variables de entorno y claves API
+.env
+*.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Archivos temporales
+*.tmp
+*.log
+lakla.txt
+
+# Specs de diseño generadas (regenerables, pueden contener datos de clientes)
+outputs/design_specs/

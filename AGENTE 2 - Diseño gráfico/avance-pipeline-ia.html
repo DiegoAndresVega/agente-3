@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sustain Awards · Avance Pipeline IA — Diseño Automático</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --verde: #2d7a5f;
+        --verde-claro: #e8f5f0;
+        --naranja: #e07b39;
+        --naranja-claro: #fdf3ec;
+        --rojo: #c0392b;
+        --rojo-claro: #fdf0ee;
+        --gris: #6b7280;
+        --gris-claro: #f9fafb;
+        --borde: #e5e7eb;
+        --texto: #111827;
+        --texto-suave: #6b7280;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+          Arial, sans-serif;
+        background: #f3f4f6;
+        color: var(--texto);
+        line-height: 1.6;
+      }
+
+      /* ── HEADER ── */
+      .header {
+        background: linear-gradient(135deg, #1a2e25 0%, #2d4a38 100%);
+        color: #fff;
+        padding: 48px 0 40px;
+        text-align: center;
+      }
+      .header .badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 4px 16px;
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 16px;
+        color: #a8d5c2;
+      }
+      .header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 8px;
+      }
+      .header h1 span {
+        color: #6abf9e;
+      }
+      .header p {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.6);
+        max-width: 520px;
+        margin: 0 auto;
+      }
+      .header .meta {
+        margin-top: 24px;
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .header .meta span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* ── LAYOUT ── */
+      .container {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+      }
+
+      /* ── SECCIÓN ── */
+      .section {
+        margin-bottom: 40px;
+      }
+      .section-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--gris);
+        margin-bottom: 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--borde);
+      }
+      .section-title .num {
+        background: var(--texto);
+        color: #fff;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+      }
+
+      /* ── CARD ── */
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid var(--borde);
+        padding: 28px 32px;
+        margin-bottom: 16px;
+      }
+      .card h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: var(--texto);
+      }
+      .card p {
+        font-size: 0.9rem;
+        color: #374151;
+        line-height: 1.7;
+        margin-bottom: 8px;
+      }
+      .card p:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ── RESUMEN ESTADO ── */
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      .status-box {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid var(--borde);
+        padding: 20px;
+        text-align: center;
+      }
+      .status-box .num-big {
+        font-size: 2.2rem;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 4px;
+      }
+      .status-box .label {
+        font-size: 0.8rem;
+        color: var(--texto-suave);
+      }
+      .status-box.verde .num-big {
+        color: var(--verde);
+      }
+      .status-box.naranja .num-big {
+        color: var(--naranja);
+      }
+      .status-box.rojo .num-big {
+        color: var(--rojo);
+      }
+
+      /* ── TASK LIST ── */
+      .task-list {
+        list-style: none;
+      }
+      .task-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--borde);
+        font-size: 0.9rem;
+      }
+      .task-list li:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .task-icon {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .task-icon.done {
+        background: var(--verde-claro);
+        color: var(--verde);
+      }
+      .task-icon.pending {
+        background: var(--naranja-claro);
+        color: var(--naranja);
+      }
+      .task-icon.blocked {
+        background: var(--rojo-claro);
+        color: var(--rojo);
+      }
+      .task-body {
+        flex: 1;
+      }
+      .task-body strong {
+        display: block;
+        font-weight: 600;
+        color: var(--texto);
+      }
+      .task-body span {
+        color: var(--texto-suave);
+        font-size: 0.82rem;
+      }
+      .task-tag {
+        display: inline-block;
+        font-size: 0.68rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 10px;
+        margin-left: auto;
+        flex-shrink: 0;
+        margin-top: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .task-tag.done {
+        background: var(--verde-claro);
+        color: var(--verde);
+      }
+      .task-tag.pending {
+        background: var(--naranja-claro);
+        color: var(--naranja);
+      }
+      .task-tag.blocked {
+        background: var(--rojo-claro);
+        color: var(--rojo);
+      }
+
+      /* ── FLUJO PIPELINE ── */
+      .pipeline {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .pipe-step {
+        display: flex;
+        gap: 16px;
+        align-items: stretch;
+      }
+      .pipe-line-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 36px;
+        flex-shrink: 0;
+      }
+      .pipe-dot {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--verde);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      .pipe-dot.ia {
+        background: #6d28d9;
+      }
+      .pipe-connector {
+        width: 2px;
+        flex: 1;
+        background: var(--borde);
+        margin: 4px 0;
+        min-height: 16px;
+      }
+      .pipe-body {
+        flex: 1;
+        padding-bottom: 20px;
+      }
+      .pipe-step:last-child .pipe-body {
+        padding-bottom: 0;
+      }
+      .pipe-body h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+        padding-top: 6px;
+      }
+      .pipe-body p {
+        font-size: 0.85rem;
+        color: var(--texto-suave);
+        line-height: 1.6;
+      }
+      .pipe-body .tag-small {
+        display: inline-block;
+        background: #ede9fe;
+        color: #6d28d9;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 8px;
+        margin-bottom: 4px;
+      }
+      .pipe-body .tag-green {
+        background: var(--verde-claro);
+        color: var(--verde);
+      }
+
+      /* ── COSTES ── */
+      .cost-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+      }
+      .cost-table th {
+        text-align: left;
+        padding: 10px 14px;
+        background: var(--gris-claro);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--gris);
+        border-bottom: 1px solid var(--borde);
+      }
+      .cost-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--borde);
+        vertical-align: top;
+        line-height: 1.5;
+      }
+      .cost-table tr:last-child td {
+        border-bottom: none;
+      }
+      .cost-table .total-row td {
+        font-weight: 700;
+        background: var(--verde-claro);
+        color: var(--verde);
+        border-bottom: none;
+      }
+      .cost-table .mono {
+        font-family: "SF Mono", "Fira Code", monospace;
+        font-size: 0.82rem;
+      }
+      .cost-note {
+        font-size: 0.82rem;
+        color: var(--texto-suave);
+        margin-top: 12px;
+        padding: 12px 16px;
+        background: var(--gris-claro);
+        border-radius: 8px;
+        border-left: 3px solid var(--borde);
+      }
+
+      .model-compare {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .model-card {
+        border-radius: 10px;
+        border: 1px solid var(--borde);
+        padding: 16px;
+        text-align: center;
+      }
+      .model-card.recomendado {
+        border-color: var(--verde);
+        background: var(--verde-claro);
+      }
+      .model-card h4 {
+        font-size: 0.85rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .model-card .precio {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--verde);
+        margin: 6px 0;
+      }
+      .model-card .precio span {
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: var(--gris);
+      }
+      .model-card p {
+        font-size: 0.78rem;
+        color: var(--texto-suave);
+        line-height: 1.5;
+      }
+      .rec-badge {
+        display: inline-block;
+        background: var(--verde);
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      /* ── PREGUNTAS ── */
+      .questions-list {
+        list-style: none;
+        counter-reset: q;
+      }
+      .questions-list li {
+        counter-increment: q;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--borde);
+        font-size: 0.9rem;
+      }
+      .questions-list li:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .questions-list li::before {
+        content: counter(q);
+        background: var(--texto);
+        color: #fff;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .questions-list li .q-body strong {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 3px;
+      }
+      .questions-list li .q-body span {
+        color: var(--texto-suave);
+        font-size: 0.82rem;
+        line-height: 1.6;
+      }
+      .q-cat {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+      }
+      .q-cat.negocio {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .q-cat.tecnico {
+        background: #e0e7ff;
+        color: #3730a3;
+      }
+      .q-cat.producto {
+        background: var(--verde-claro);
+        color: var(--verde);
+      }
+      .q-cat.calidad {
+        background: var(--naranja-claro);
+        color: #92400e;
+      }
+
+      /* ── ALERTA ── */
+      .alert {
+        border-radius: 10px;
+        padding: 16px 20px;
+        font-size: 0.88rem;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+      .alert.info {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e40af;
+      }
+      .alert.warn {
+        background: var(--naranja-claro);
+        border: 1px solid #fed7aa;
+        color: #92400e;
+      }
+      .alert.ok {
+        background: var(--verde-claro);
+        border: 1px solid #a7f3d0;
+        color: #065f46;
+      }
+      .alert .icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .alert p {
+        margin: 0;
+        line-height: 1.6;
+      }
+      .alert strong {
+        font-weight: 600;
+      }
+
+      /* ── FOOTER ── */
+      .footer {
+        text-align: center;
+        padding: 40px 20px;
+        font-size: 0.78rem;
+        color: var(--texto-suave);
+        border-top: 1px solid var(--borde);
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="badge">Informe de avance · Pipeline IA</div>
+      <h1>Sustain Awards<br /><span>Diseño Automático con IA</span></h1>
+      <p>
+        Estado actual del backend de personalización de trofeos mediante
+        inteligencia artificial
+      </p>
+      <div class="meta">
+        <span>Marzo 2026</span>
+        <span>·</span>
+        <span>Versión 0.1 — Prueba de concepto local</span>
+      </div>
+    </div>
+
+    <div class="container">
+      <!-- ═══════════════════════════════════════════════ 1. RESUMEN -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">1</div>
+          Resumen ejecutivo
+        </div>
+
+        <div class="status-grid">
+          <div class="status-box verde">
+            <div class="num-big">4</div>
+            <div class="label">Módulos completados</div>
+          </div>
+          <div class="status-box naranja">
+            <div class="num-big">2</div>
+            <div class="label">Pendientes de decisión</div>
+          </div>
+          <div class="status-box rojo">
+            <div class="num-big">1</div>
+            <div class="label">Bloqueante (API key)</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>¿Qué se ha construido?</h3>
+          <p>
+            Se ha desarrollado un
+            <strong>pipeline backend completo en Python</strong> que recibe los
+            assets de un cliente (logo, brandbook PDF, URL corporativa y texto
+            del galardón) y, usando la IA de Anthropic (Claude), genera
+            automáticamente
+            <strong>3 propuestas de diseño personalizadas</strong> para el
+            trofeo. Cada propuesta se renderiza como imagen y se compone sobre
+            la fotografía real del producto, devolviendo 3 mockups JPG listos
+            para presentar al cliente.
+          </p>
+          <p>
+            El sistema funciona en local y está preparado para conectarse al
+            servidor web de Sustain Awards sin modificar la lógica de negocio:
+            solo cambia el envoltorio HTTP.
+          </p>
+        </div>
+
+        <div class="alert ok">
+          <div class="icon">✓</div>
+          <p>
+            <strong>El código es production-ready en su lógica core.</strong> Lo
+            que falta no es código — es configuración (API key), fotografías de
+            producto calibradas y decisiones de negocio sobre modelo de costes y
+            calidad.
+          </p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════ 2. TASK LIST -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">2</div>
+          Lista de tareas
+        </div>
+
+        <div class="card">
+          <ul class="task-list">
+            <li>
+              <div class="task-icon done">✓</div>
+              <div class="task-body">
+                <strong>Capa 0 — Normalización de assets</strong>
+                <span
+                  >Recibe logo (PNG/JPG), PDF brandbook y URL corporativa.
+                  Codifica a base64, extrae colores CSS de la web y analiza
+                  densidad visual.</span
+                >
+              </div>
+              <span class="task-tag done">Hecho</span>
+            </li>
+
+            <li>
+              <div class="task-icon done">✓</div>
+              <div class="task-body">
+                <strong>Capa 1 — Agente IA (3 llamadas a Claude)</strong>
+                <span
+                  >Llamada A: análisis de marca. Llamada B: selección de 3
+                  arquetipos compositivos de 8 disponibles. Llamada C:
+                  generación de 3 design briefs JSON completos con colores,
+                  tipografía y composición.</span
+                >
+              </div>
+              <span class="task-tag done">Hecho</span>
+            </li>
+
+            <li>
+              <div class="task-icon done">✓</div>
+              <div class="task-body">
+                <strong>Capa 2 — Renderer programático</strong>
+                <span
+                  >Dibuja el diseño desde el JSON: gradientes numpy, formas
+                  flotantes semitransparentes, split cromático, logo con
+                  eliminación de fondo blanco, jerarquía tipográfica (titular,
+                  destinatario, subtítulo, año).</span
+                >
+              </div>
+              <span class="task-tag done">Hecho</span>
+            </li>
+
+            <li>
+              <div class="task-icon done">✓</div>
+              <div class="task-body">
+                <strong>Capa 3 — Compositing sobre foto del trofeo</strong>
+                <span
+                  >Pega el diseño sobre la fotografía real del trofeo en las
+                  coordenadas calibradas. Devuelve JPG fotorrealista. El Totem
+                  Basic está calibrado y funcional.</span
+                >
+              </div>
+              <span class="task-tag done">Hecho</span>
+            </li>
+
+            <li>
+              <div class="task-icon done">✓</div>
+              <div class="task-body">
+                <strong>Orquestador CLI + servidor web de prueba</strong>
+                <span
+                  >Línea de comandos (<code>python orchestrador.py ORD-001</code
+                  >) y formulario web local (Flask) para testear sin PrestaShop.
+                  El formulario acepta logo, PDF, URL y todos los campos del
+                  galardón.</span
+                >
+              </div>
+              <span class="task-tag done">Hecho</span>
+            </li>
+
+            <li>
+              <div class="task-icon pending">!</div>
+              <div class="task-body">
+                <strong
+                  >Fotografías y calibración del catálogo de trofeos</strong
+                >
+                <span
+                  >Solo el Totem Basic tiene foto calibrada. La Placa A5 tiene
+                  un placeholder que no funciona. Cada nuevo modelo requiere:
+                  foto de producto + medir coordenadas de zona imprimible.</span
+                >
+              </div>
+              <span class="task-tag pending">Pendiente</span>
+            </li>
+
+            <li>
+              <div class="task-icon pending">!</div>
+              <div class="task-body">
+                <strong>Integración con PrestaShop / servidor web</strong>
+                <span
+                  >El backend está listo. Falta el conector HTTP que recibe el
+                  JSON del formulario de PrestaShop y llama al pipeline. Es
+                  trabajo menor — 1-2 días de desarrollo.</span
+                >
+              </div>
+              <span class="task-tag pending">Pendiente</span>
+            </li>
+
+            <li>
+              <div class="task-icon blocked">✗</div>
+              <div class="task-body">
+                <strong>API Key de Anthropic (Claude)</strong>
+                <span
+                  >Sin esta clave no se puede ejecutar ninguna prueba real. Es
+                  la única dependencia externa actualmente. Requiere crear
+                  cuenta en console.anthropic.com y añadir créditos.</span
+                >
+              </div>
+              <span class="task-tag blocked">Bloqueante</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════ 3. CÓMO FUNCIONA -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">3</div>
+          Cómo funciona (explicación sencilla)
+        </div>
+
+        <div class="card">
+          <p>
+            El cliente sube su logo, su manual de marca (PDF) y nos dice el
+            nombre del premiado y el texto del galardón. A partir de ahí, el
+            sistema hace esto automáticamente:
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="pipeline">
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot">0</div>
+                <div class="pipe-connector"></div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small tag-green">Automático</span>
+                <h4>Preparación de assets</h4>
+                <p>
+                  Se lee el logo, se extrae el PDF y se visita la web
+                  corporativa del cliente para analizar qué colores usa, si
+                  tiene gradientes, qué densidad visual tiene su web. Todo se
+                  empaqueta en un contexto unificado.
+                </p>
+              </div>
+            </div>
+
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot ia">IA</div>
+                <div class="pipe-connector"></div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small">Claude · Llamada 1</span>
+                <h4>Análisis de marca</h4>
+                <p>
+                  Claude ve el logo, lee el PDF y analiza la web. Identifica el
+                  tono de la marca, los colores principales, si el logo tiene
+                  forma geométrica aprovechable, si el estilo es minimalista o
+                  cargado, etc.
+                </p>
+              </div>
+            </div>
+
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot ia">IA</div>
+                <div class="pipe-connector"></div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small">Claude · Llamada 2</span>
+                <h4>Selección de 3 composiciones</h4>
+                <p>
+                  De 8 estilos compositivos disponibles (gradiente con formas,
+                  split cromático, minimalismo tipográfico, patrón radial,
+                  etc.), la IA elige los 3 que mejor encajan con esa identidad
+                  visual. Siempre garantiza variedad: al menos uno oscuro, uno
+                  claro y uno minimalista.
+                </p>
+              </div>
+            </div>
+
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot ia">IA</div>
+                <div class="pipe-connector"></div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small">Claude · Llamada 3</span>
+                <h4>Generación de especificaciones de diseño</h4>
+                <p>
+                  Para cada una de las 3 composiciones, la IA genera un JSON
+                  completo con todos los parámetros del diseño: colores exactos
+                  (hex), tipo de fondo, tamaño y posición del logo, color y
+                  alineación del texto, formas decorativas, opacidades.
+                </p>
+              </div>
+            </div>
+
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot">R</div>
+                <div class="pipe-connector"></div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small tag-green">Automático</span>
+                <h4>Renderizado de los 3 diseños</h4>
+                <p>
+                  Un renderer en Python dibuja cada diseño desde cero siguiendo
+                  las especificaciones: genera gradientes de color, coloca las
+                  formas decorativas, incrusta el logo del cliente y escribe el
+                  texto del galardón con jerarquía tipográfica.
+                </p>
+              </div>
+            </div>
+
+            <div class="pipe-step">
+              <div class="pipe-line-col">
+                <div class="pipe-dot">F</div>
+              </div>
+              <div class="pipe-body">
+                <span class="tag-small tag-green">Automático</span>
+                <h4>Composición sobre la foto del trofeo</h4>
+                <p>
+                  Cada diseño se pega con precisión sobre la fotografía real del
+                  trofeo en las coordenadas calibradas de la zona imprimible. El
+                  resultado son
+                  <strong>3 mockups JPG fotorrealistas</strong> que muestran
+                  exactamente cómo quedará el producto final.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert info">
+          <div class="icon">ℹ</div>
+          <p>
+            <strong>Tiempo total por pedido:</strong> entre 15 y 35 segundos. La
+            mayor parte es el tiempo que tarda Claude en analizar y generar los
+            diseños (llamadas a la API). El renderizado en sí es prácticamente
+            instantáneo.
+          </p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════ 4. COSTES -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">4</div>
+          Costes de operación (por pedido)
+        </div>
+
+        <div class="card">
+          <h3>Desglose por llamada a la IA (modelo actual: Claude Opus 4.6)</h3>
+          <table class="cost-table">
+            <thead>
+              <tr>
+                <th>Llamada</th>
+                <th>¿Qué hace?</th>
+                <th>Tokens entrada</th>
+                <th>Tokens salida</th>
+                <th>Coste aprox.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>Llamada A</strong><br /><span
+                    style="color: var(--gris); font-size: 0.8rem"
+                    >Análisis de marca</span
+                  >
+                </td>
+                <td>
+                  Lee logo (imagen) + PDF + URL. Devuelve vocabulario visual de
+                  la marca.
+                </td>
+                <td class="mono">
+                  ~6.000<br /><span
+                    style="color: var(--gris); font-size: 0.75rem"
+                    >(imagen ~3k + texto)</span
+                  >
+                </td>
+                <td class="mono">~800</td>
+                <td><strong>~$0.15</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Llamada B</strong><br /><span
+                    style="color: var(--gris); font-size: 0.8rem"
+                    >Selección arquetipos</span
+                  >
+                </td>
+                <td>
+                  Lee el análisis de marca. Elige y justifica los 3 estilos
+                  compositivos más adecuados.
+                </td>
+                <td class="mono">~2.000</td>
+                <td class="mono">~400</td>
+                <td><strong>~$0.06</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>Llamada C</strong><br /><span
+                    style="color: var(--gris); font-size: 0.8rem"
+                    >Design briefs</span
+                  >
+                </td>
+                <td>
+                  Genera los 3 JSON de diseño completos con todos los parámetros
+                  visuales.
+                </td>
+                <td class="mono">~2.500</td>
+                <td class="mono">~1.500</td>
+                <td><strong>~$0.15</strong></td>
+              </tr>
+              <tr class="total-row">
+                <td colspan="4">
+                  <strong>Total por pedido (3 mockups)</strong>
+                </td>
+                <td><strong>~$0.36 (~0.33 €)</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="cost-note">
+            Precios Anthropic a marzo 2026: Claude Opus 4.6 · $15/M tokens
+            entrada · $75/M tokens salida. Si el cliente no adjunta PDF, el
+            coste baja ~$0.04. Si la web no es accesible, también baja
+            ligeramente.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>Comparativa de modelos — calidad vs. coste</h3>
+          <div class="model-compare">
+            <div class="model-card">
+              <h4>Claude Haiku 4.5</h4>
+              <div class="precio">&lt;$0.01 <span>/ pedido</span></div>
+              <p>
+                Muy barato. Comprensión de marca limitada. Diseños menos
+                creativos y coherentes. No recomendado para presentar a
+                clientes.
+              </p>
+            </div>
+            <div class="model-card recomendado">
+              <div class="rec-badge">Recomendado</div>
+              <h4>Claude Sonnet 4.6</h4>
+              <div class="precio">~$0.03 <span>/ pedido</span></div>
+              <p>
+                Balance óptimo. Muy buena comprensión visual y creatividad de
+                marca. Calidad profesional. ~12x más barato que Opus.
+              </p>
+            </div>
+            <div class="model-card">
+              <h4>Claude Opus 4.6</h4>
+              <div class="precio">~$0.36 <span>/ pedido</span></div>
+              <p>
+                Máxima calidad. El mejor análisis de identidad visual. Adecuado
+                para clientes premium o validación del sistema. Actualmente en
+                uso.
+              </p>
+            </div>
+          </div>
+
+          <p class="cost-note" style="margin-top: 16px">
+            <strong>Recomendación:</strong> usar Sonnet por defecto y Opus para
+            cuentas enterprise o pedidos de alto valor. Con Sonnet, 1.000
+            pedidos al mes cuestan ~30 € en API. Con Opus, ~360 €. El coste por
+            pedido es marginal respecto al margen del trofeo (precio base desde
+            30 €).
+          </p>
+        </div>
+
+        <div class="alert warn">
+          <div class="icon">⚠</div>
+          <p>
+            <strong>Coste de cuenta Anthropic:</strong> se requiere crear una
+            cuenta en <em>console.anthropic.com</em> y añadir créditos prepago.
+            No hay coste mensual fijo — se paga estrictamente por uso.
+          </p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════ 5. MODELOS DE TROFEO -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">5</div>
+          Estado del catálogo de trofeos
+        </div>
+
+        <div class="card">
+          <table class="cost-table">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th>Fotografía</th>
+                <th>Coordenadas calibradas</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>Totem Basic</strong><br /><span
+                    style="color: var(--gris); font-size: 0.8rem"
+                    >Madera · 45€ base</span
+                  >
+                </td>
+                <td>
+                  ✅ Foto real disponible<br /><span
+                    style="color: var(--gris); font-size: 0.78rem"
+                    >Sustain-Awards-BASIC-Totem-3.jpg</span
+                  >
+                </td>
+                <td>
+                  ✅ Calibradas en Paint<br /><span
+                    style="color: var(--gris); font-size: 0.78rem"
+                    >Zona: 247×793px en imagen 1200×1500</span
+                  >
+                </td>
+                <td>
+                  <span class="task-tag done" style="margin: 0">Funcional</span>
+                </td>
+              </tr>
+
+              <tr>
+                <td colspan="3">
+                  <strong>Resto del catálogo Sustain Awards</strong><br /><span
+                    style="color: var(--gris); font-size: 0.78rem"
+                    >Otros modelos no incorporados todavía</span
+                  >
+                </td>
+                <td>
+                  <span class="task-tag pending" style="margin: 0"
+                    >Pendiente</span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="cost-note">
+            Añadir un nuevo modelo al pipeline: 1) fotografía del producto con
+            fondo neutro, 2) abrir en Paint y anotar coordenadas (x, y) y
+            dimensiones de la zona imprimible, 3) añadir entrada en
+            <code>trophy_catalog.json</code>. Tiempo estimado: 15 minutos por
+            modelo.
+          </p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════ PRÓXIMOS PASOS -->
+      <div class="section">
+        <div class="section-title">
+          <div class="num">6</div>
+          Próximos pasos inmediatos
+        </div>
+
+        <div class="alert ok">
+          <div class="icon">→</div>
+          <p>
+            <strong>Paso 1 :</strong> Crear cuenta en
+            <em>console.anthropic.com</em> y añadir 5–10 € de crédito para
+            pruebas. Compartir la API key con el equipo de desarrollo.
+          </p>
+        </div>
+        <div class="alert ok">
+          <div class="icon">→</div>
+          <p>
+            <strong>Paso 2 :</strong> Ejecutar la demo en local con un logo real
+            de un cliente tipo. Validar que las 3 propuestas generadas tienen el
+            nivel de calidad esperado.
+          </p>
+        </div>
+        <div class="alert ok">
+          <div class="icon">→</div>
+          <p>
+            <strong>Paso 3 :</strong> Responder las preguntas de esta
+            presentación y calibrar el resto de modelos de trofeo con fotos
+            reales.
+          </p>
+        </div>
+        <div class="alert warn">
+          <div class="icon">⚠</div>
+          <p>
+            <strong>Decisión necesaria:</strong> elegir entre Claude Sonnet (3
+            céntimos/pedido, calidad alta) y Claude Opus (36 céntimos/pedido,
+            calidad máxima) antes de ir a producción. Recomendamos empezar con
+            Sonnet y escalar a Opus si los clientes demandan más.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Sustain Awards · Pipeline de Diseño Automático con IA · Versión 0.1 ·
+      Marzo 2026
+    </div>
+  </body>
+</html>

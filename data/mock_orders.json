@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "descripcion": "Datos simulados que imitan lo que llegara desde PrestaShop",
+    "version": "2.0"
+  },
+  "clientes": [
+    {
+      "id": "cliente_001",
+      "empresa": "Iniciativas Sociales Ofesauto",
+      "url_corporativa": "https://www.ofesauto.es",
+      "email": "contacto@ofesauto.es"
+    },
+    {
+      "id": "cliente_002",
+      "empresa": "GreenEnergy Global",
+      "url_corporativa": "https://www.greenenergy.com",
+      "email": "carlos@greenenergy.com"
+    }
+  ],
+  "pedidos": [
+    {
+      "id_pedido": "ORD-2026-001",
+      "id_cliente": "cliente_001",
+      "modelo_trofeo": "totem_basic",
+      "cantidad": 10,
+      "presupuesto": 1500,
+      "evento": {
+        "nombre": "Convocatoria Iniciativas Sociales 2026",
+        "fecha": "2026",
+        "lugar": "Madrid"
+      },
+      "award": {
+        "headline": "Premio a la\nIniciativa Social",
+        "recipient": "Nombre del Premiado",
+        "subtitle": "Por su compromiso con\nla seguridad vial",
+        "fecha": "2026"
+      },
+      "assets": {
+        "logo_path": "assets/logos/logo_ofesauto.png",
+        "brand_book_path": "assets/brand_books/MANUAL_INICIATIVAS_SOCIALES.pdf",
+        "url_corporativa": "https://www.ofesauto.es",
+        "url_evento": "https://www.iniciativassociales.ofesauto.es"
+      },
+      "identidad_visual": {
+        "color_primario": "#00615C",
+        "color_secundario": "#6ABF4B",
+        "color_texto": "#FFFFFF",
+        "fuente": "sans-serif"
+      }
+    },
+    {
+      "id_pedido": "ORD-2026-002",
+      "id_cliente": "cliente_002",
+      "modelo_trofeo": "placa_a5",
+      "cantidad": 25,
+      "presupuesto": 800,
+      "evento": {
+        "nombre": "Green Future Awards",
+        "fecha": "20 Junio 2026",
+        "lugar": "Madrid"
+      },
+      "award": {
+        "headline": "Sustainability Excellence Award",
+        "recipient": "Ana Martinez",
+        "subtitle": "Liderazgo en energias renovables",
+        "fecha": "2026"
+      },
+      "assets": {
+        "logo_path": "assets/logos/greenenergy_logo.png",
+        "brand_book_path": null,
+        "url_corporativa": "https://www.greenenergy.com"
+      },
+      "identidad_visual": {
+        "color_primario": "#2ECC71",
+        "color_secundario": "#FFFFFF",
+        "color_texto": "#FFFFFF",
+        "fuente": "sans-serif"
+      }
+    }
+  ]
+}
