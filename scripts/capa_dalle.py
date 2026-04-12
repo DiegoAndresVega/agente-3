@@ -79,6 +79,39 @@ def generar_texto_dalle(textos: dict, concepto: dict) -> tuple[Image.Image, str]
     bg_hex  = "#000000" if text_bg_dark else "#FFFFFF"
     bg_name = "pure solid black #000000" if text_bg_dark else "pure solid white #FFFFFF"
 
+    layout = concepto.get("text_style", {}).get("layout", "stacked")
+
+    _layout_instructions = {
+        "spread": (
+            "SPREAD LAYOUT — elements are SPATIALLY SEPARATED with wide vertical gaps: "
+            "award title in the UPPER ZONE of the image (top quarter). "
+            "Recipient name placed EXACTLY IN THE CENTER of the image with generous empty space above and below. "
+            "Organization name in the LOWER ZONE (bottom quarter). "
+            "Do NOT stack elements close together — each floats independently with breathing room."
+        ),
+        "staggered": (
+            "STAGGERED ASYMMETRIC LAYOUT — intentional asymmetry: "
+            "award title small and centered horizontally, placed in the upper area. "
+            "Recipient name MASSIVE and LEFT-ALIGNED (flush to the left of the center zone). "
+            "Organization name small and RIGHT-ALIGNED (flush to the right of the center zone). "
+            "This asymmetry is intentional — it is the design."
+        ),
+        "billboard": (
+            "BILLBOARD LAYOUT — the recipient name IS THE ENTIRE DESIGN: "
+            "recipient name fills the MAXIMUM possible space at enormous scale, dominating the image. "
+            "Award title in tiny caption size at the very top (almost invisible, very small). "
+            "Organization name in tiny caption size at the very bottom (almost invisible, very small). "
+            "The recipient name is the only visual focus — make it as large as possible."
+        ),
+        "stacked": (
+            "STACKED LAYOUT — all elements grouped as a compact centered block "
+            "with consistent tight spacing between them."
+        ),
+    }
+    composicion  = _layout_instructions.get(layout, _layout_instructions["stacked"])
+    font_family  = concepto.get("text_style", {}).get("font_family")
+    font_instr   = f"Use {font_family} typeface throughout. " if font_family else ""
+
     partes = []
     if headline:
         partes.append(f"award title '{headline}' at medium size")
@@ -95,11 +128,13 @@ def generar_texto_dalle(textos: dict, concepto: dict) -> tuple[Image.Image, str]
     jerarquia = ", ".join(partes)
 
     prompt = (
-        f"Award typography layout on {bg_name} background. "
+        f"Award typography image on {bg_name} background. "
         f"Solid color background only — background is {bg_name} and nothing else. "
         "No gradients, no textures, no shapes, no decorations on the background. "
-        "Vertical portrait orientation, text centered. "
-        f"Text elements from top to bottom: {jerarquia}. "
+        "Vertical portrait orientation. "
+        f"COMPOSITION: {composicion} "
+        f"Text elements: {jerarquia}. "
+        f"{font_instr}"
         f"Typography style: {text_prompt}. "
         "All text strictly within center 70% of image width — "
         "wide empty margins on left and right sides. "

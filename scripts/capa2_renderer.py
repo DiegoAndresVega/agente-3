@@ -171,6 +171,24 @@ def _cargar_fuente(size: int, style: str = "bold") -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
+def _cargar_fuente_marca(size: int, font_family: str | None,
+                          weight: int = 700, style_fallback: str = "bold") -> ImageFont.ImageFont:
+    """
+    Carga la fuente de marca desde caché local o Google Fonts.
+    Si font_family es None o la descarga falla → fallback a _cargar_fuente(size, style_fallback).
+    Nunca lanza excepción.
+    """
+    if font_family:
+        try:
+            from scripts.font_manager import get_font_path
+            path = get_font_path(font_family, weight)
+            if path and path.exists():
+                return ImageFont.truetype(str(path), size)
+        except Exception as e:
+            print(f"  [renderer] Fuente marca no disponible ({font_family} w{weight}): {e}")
+    return _cargar_fuente(size, style_fallback)
+
+
 def cargar_fuentes(size_lg=18, size_md=14, size_sm=12, size_xs=10) -> dict:
     return {
         "bold_lg": _cargar_fuente(size_lg, "bold"),
@@ -258,31 +276,50 @@ def _preparar_logo(logo_path: str, treatment: str,
                    opacity: float = 1.0, band_color: str | None = None) -> Image.Image:
     """
     treatment:
-      "blanco"     — píxeles opacos → blanco puro
-      "negro"      — píxeles opacos → negro puro
-      "color"      — colores originales (elimina solo el fondo blanco)
+      "blanco"     — remapea a rango 200-255 preservando luminancia (claro sobre oscuro)
+      "negro"      — remapea a rango 0-60 preservando luminancia (oscuro sobre claro)
+      "color"      — colores originales (elimina solo el fondo blanco si no tiene alfa)
       "watermark"  — colores originales con opacidad reducida (usa opacity)
       "banda"      — blanco sobre rectángulo de color de marca (band_color)
     """
-    logo = Image.open(logo_path).convert("RGBA")
-    arr  = np.array(logo)
-    # Eliminar fondo blanco
-    white = (arr[:,:,0] > 230) & (arr[:,:,1] > 230) & (arr[:,:,2] > 230)
-    arr[white, 3] = 0
+    logo_orig = Image.open(logo_path)
+    has_alpha = logo_orig.mode in ("RGBA", "LA", "PA")
+    logo = logo_orig.convert("RGBA")
+    arr  = np.array(logo, dtype=np.float32)
+
+    # Solo eliminar fondo blanco si el logo NO tiene canal alfa propio
+    # (evita borrar elementos blancos intencionales de logos con transparencia)
+    if not has_alpha:
+        white = (arr[:, :, 0] > 228) & (arr[:, :, 1] > 228) & (arr[:, :, 2] > 228)
+        arr[white, 3] = 0.0
+
+    opaque = arr[:, :, 3] > 30
 
     if treatment == "blanco":
-        opaque = arr[:,:,3] > 30
-        arr[opaque] = [255, 255, 255, 255]
+        # Preservar luminancia: píxeles oscuros → blanco brillante, claros → blanco suave
+        # Resultado: internos del logo distinguibles (no rectangulo uniforme)
+        lum = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+        light = np.clip(200.0 + (255.0 - lum) * (55.0 / 255.0), 200.0, 255.0)
+        arr[opaque, 0] = light[opaque]
+        arr[opaque, 1] = light[opaque]
+        arr[opaque, 2] = light[opaque]
+        arr[opaque, 3] = 255.0
+
     elif treatment == "negro":
-        opaque = arr[:,:,3] > 30
-        arr[opaque] = [15, 15, 15, 255]
+        # Preservar luminancia: píxeles claros → gris oscuro, oscuros → casi negro
+        lum = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+        dark = np.clip(lum * (60.0 / 255.0), 0.0, 60.0)
+        arr[opaque, 0] = dark[opaque]
+        arr[opaque, 1] = dark[opaque]
+        arr[opaque, 2] = dark[opaque]
+        arr[opaque, 3] = 255.0
+
     elif treatment == "watermark":
-        opaque = arr[:,:,3] > 30
-        alpha_val = max(20, min(255, int(opacity * 255)))
+        alpha_val = float(max(20, min(255, int(opacity * 255))))
         arr[opaque, 3] = alpha_val
     # "color" y "banda": se usan los colores originales
 
-    return Image.fromarray(arr)
+    return Image.fromarray(arr.astype(np.uint8))
 
 
 def _render_logo(concepto: dict, img: Image.Image,
@@ -336,6 +373,54 @@ def _render_logo(concepto: dict, img: Image.Image,
     else:
         lx, ly = (w - logo.width) // 2, mg
 
+    # ── Auto-corrección universal: medir fondo real y garantizar contraste ────
+    # Claude asigna el tratamiento sin ver el fondo DALLE; medimos aquí y corregimos.
+    # Cubre: blanco/negro (threshold incorrecto) y color (incompatibilidad cromática).
+    if treatment != "watermark":
+        x1 = max(0, lx); y1 = max(0, ly)
+        x2 = min(w, lx + logo.width); y2 = min(h, ly + logo.height)
+        if x2 > x1 and y2 > y1:
+            region = np.array(img.crop((x1, y1, x2, y2)).convert("RGB"))
+            bg_r = int(np.median(region[:, :, 0]))
+            bg_g = int(np.median(region[:, :, 1]))
+            bg_b = int(np.median(region[:, :, 2]))
+            lum  = _luminancia((bg_r, bg_g, bg_b))
+
+            # Tratamiento óptimo por luminancia real del fondo
+            # 0.45 es el punto de equilibrio: por debajo → logo blanco, por encima → negro
+            optimal = "blanco" if lum < 0.45 else "negro"
+
+            new_treatment = None
+
+            if treatment in ("blanco", "negro") and treatment != optimal:
+                new_treatment = optimal
+
+            elif treatment == "color":
+                # Verificar distancia cromática logo–fondo
+                logo_arr = np.array(logo)
+                opaque   = logo_arr[:, :, 3] > 30
+                if opaque.any():
+                    lr = int(np.median(logo_arr[opaque, 0]))
+                    lg = int(np.median(logo_arr[opaque, 1]))
+                    lb = int(np.median(logo_arr[opaque, 2]))
+                    # Distancia euclidiana RGB (max posible ≈ 441)
+                    dist = ((lr - bg_r) ** 2 + (lg - bg_g) ** 2 + (lb - bg_b) ** 2) ** 0.5
+                    if dist < 75:   # colores demasiado similares → logo se funde con fondo
+                        new_treatment = optimal
+
+            if new_treatment:
+                try:
+                    logo2  = _preparar_logo(logo_path, new_treatment)
+                    ratio2 = min(max_w / logo2.width, max_h / logo2.height)
+                    logo   = logo2.resize(
+                        (max(1, int(logo2.width  * ratio2)),
+                         max(1, int(logo2.height * ratio2))), Image.LANCZOS)
+                    print(f"  [logo] Auto-corrección: {treatment} → {new_treatment} "
+                          f"(lum={lum:.2f})")
+                    treatment = new_treatment
+                except Exception:
+                    pass
+
     # ── treatment="banda": rectángulo de color de marca detrás del logo ──
     if treatment == "banda" and band_color:
         try:
@@ -373,6 +458,7 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     color_hex     = tc.get("color", "#FFFFFF")
     alineacion    = tc.get("alignment", "center")
     font_style    = tc.get("font_style", "bold")
+    font_family   = tc.get("font_family")  # Google Fonts name o None
     margin_h      = int(w * float(tc.get("margin_h", 0.07)))
     layout        = tc.get("layout", "stacked")
     sep_lines     = tc.get("separator_lines", False)
@@ -458,9 +544,9 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
                     + _h_bloque(subtitle, sz_sub) + _h_bloque(fecha, sz_sub)
                     + esp_base * max(0, n_blocks - 1))
 
-    font_hl  = _cargar_fuente(sz_hl,  font_style)
-    font_rec = _cargar_fuente(sz_rec, font_style)
-    font_sub = _cargar_fuente(sz_sub, font_style)
+    font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style)
+    font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style)
+    font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style)
 
     # ── Layouts especiales: spread, staggered, billboard ────────────
     if layout == "spread":
@@ -533,14 +619,18 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         font_sub_b = _cargar_fuente(sz_sub_b, font_style)
         gap = max(6, int(h * 0.018))
 
-        hl_h_px  = _h_bloque(headline, font_hl_b)  if headline else 0
-        sub_h_px = _h_bloque(subtitle, font_sub_b) if subtitle else 0
+        hl_h_px  = _h_bloque(headline, sz_hl_b)  if headline else 0
+        sub_h_px = _h_bloque(subtitle, sz_sub_b) if subtitle else 0
         rec_zone = max(20, zone_h - hl_h_px - sub_h_px - gap * 2)
 
         # Fuente máxima que cabe en la zona del recipient
         font_rec_b = _fuente_optima(draw, [recipient] if recipient else ["X"],
                                     int(h * 0.32), text_width, rec_zone, font_style)
-        rec_h_px = _h_bloque(recipient, font_rec_b) if recipient else 0
+        if recipient:
+            lineas_rec = _wrap_sin_partir(draw, recipient, font_rec_b, text_width)
+            rec_h_px   = len(lineas_rec) * (font_rec_b.getbbox("A")[3] + 6)
+        else:
+            rec_h_px = 0
 
         y_hl  = y_start
         y_rec = (y_start + hl_h_px + gap) if headline else (y_start + max(0, (zone_h - rec_h_px) // 2))
@@ -741,9 +831,12 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
         logo_bottom = int(h * 0.04)
 
     # ── Paso 4: Texto del galardón ────────────────────────────────────
-    print(f"    [DEBUG] USE_DALLE={capa_dalle.USE_DALLE} text_prompt={bool(text_prompt)} award={award}")
+    tc_info  = concepto.get("text_style", {})
+    layout   = tc_info.get("layout", "stacked")
+    anchor   = tc_info.get("text_anchor", "center")
+    print(f"    [LAYOUT] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
     if capa_dalle.USE_DALLE and text_prompt:
-        print(f"    [DALLE-TEXTO] Generando tipografía para propuesta {pid}...")
+        print(f"    [DALLE-TEXTO] Generando tipografía para propuesta {pid} (layout={layout})...")
         texto_img, bg_hex = capa_dalle.generar_texto_dalle(award, concepto)
         print(f"    [DEBUG] texto_img={texto_img is not None} bg_hex={bg_hex}")
 

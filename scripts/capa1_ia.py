@@ -55,7 +55,10 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
   },
   "typography": {
     "style": "sans-serif|serif|display|monospace",
-    "brand_name_length": "corto|medio|largo"
+    "brand_name_length": "corto|medio|largo",
+    "font_name": "nombre exacto de la fuente principal del brandbook (ej: Futura PT, DIN Pro, FF Clan). null si no identificable.",
+    "google_fonts_name": "nombre EXACTO en Google Fonts si la fuente está disponible o tiene equivalente cercano (ej: Montserrat, Raleway, Roboto). null si no hay equivalente razonable.",
+    "google_fonts_weights": [400, 700]
   },
   "graphic_resources": {
     "uses_gradients": false,
@@ -70,6 +73,9 @@ Reglas:
 - primary_tint: mezcla primario con blanco (35%). Calcula el HEX.
 - primary_shade: mezcla primario con negro (30%). Calcula el HEX.
 - Si no hay brandbook ni web, deduce todo del logo.
+- typography.font_name: extrae el nombre exacto de la fuente principal. null si no ves ninguna mención explícita.
+- typography.google_fonts_name: si esa fuente está en Google Fonts o tiene equivalente cercano, escribe el nombre exacto como aparece en fonts.google.com (mayúsculas exactas, ej: "Roboto", "Open Sans"). null si no hay equivalente razonable.
+- typography.google_fonts_weights: siempre [400, 700] como mínimo.
 - Responde SOLO con el JSON.\
 """
 
@@ -91,9 +97,12 @@ DIFERENCIACIÓN OBLIGATORIA entre los 6 conceptos:
   4. Colores de texto distintos: no repitas la misma combinación en dos conceptos
   5. text_style.text_anchor OBLIGATORIO variado: P1=top, P2=center, P3=bottom,
      P4=bottom, P5=top, P6=center — sin repetir el mismo anchor en propuestas consecutivas
-  6. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
+  6. text_style.layout OBLIGATORIO variado — los 4 tipos deben aparecer:
+     P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+     Este campo ES OBLIGATORIO en cada propuesta. No lo omitas nunca.
+  7. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
      En fondos OSCUROS usa siempre texto claro (#FFFFFF, #FFD700, #E0E0E0)
-  7. Uso del logo CREATIVO y variado — elige entre estas opciones:
+  8. Uso del logo CREATIVO y variado — elige entre estas opciones:
      - "blanco"    → logo en blanco, para fondos oscuros (clásico)
      - "negro"     → logo en negro, para fondos claros o blancos
      - "color"     → logo en colores originales de marca, para fondos neutros/claros
@@ -148,6 +157,13 @@ CAMPO text_bg_dark — fondo para generación del texto:
   - false → el texto es OSCURO (azul, negro, gris oscuro) → fondo blanco para generación
   Regla: si el recipient en text_prompt es de color claro → true. Si es oscuro → false.
 
+CAMPO text_style.font_family — fuente de marca para el renderizado:
+  - Copia aquí el valor de typography.google_fonts_name del análisis de marca.
+  - Si es null en el análisis, escribe null aquí. No inventes ni supongas fuentes.
+  - Esta fuente se descarga de Google Fonts y se usa para el renderizado PIL (fallback).
+  - También menciónala en text_prompt: añade "rendered in [FontName] typeface" al estilo.
+  - Es IGUAL en los 6 conceptos — es la fuente corporativa, no varía por propuesta.
+
 CAMPO text_style.text_anchor — posición vertical del bloque de texto en el canvas:
   OBLIGATORIO variar entre las 6 propuestas. Distribución sugerida:
   - Propuestas 1, 4: "top"    (texto en la parte alta, logo abajo o pequeño arriba)
@@ -189,7 +205,7 @@ Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
     "bg_tone": "dark|light|mid",
     "color_overlay": { "active": false, "color": "#HEX de marca", "opacity": 0.10 },
     "logo": { "treatment": "blanco|negro|color|watermark|banda", "position": "top_center|top_left|top_right|center|bottom_center", "scale": 0.55, "opacity": 0.15, "band_color": "#HEX o null" },
-    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered|billboard" },
+    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered|billboard", "font_family": "Google Fonts name o null" },
     "award_text": { "headline": "...", "recipient": "...", "subtitle": "..." }
   },
   { "proposal_id": 2, ... },
@@ -402,6 +418,8 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
     headline_txt  = award.get('headline')  or 'Excellence Award'
     subtitle_txt  = award.get('subtitle')  or 'Sustain Awards'
     fecha_line = f"\n- Fecha/Año   : {award.get('fecha', '')}" if award.get("fecha") else ""
+    typo      = brand_analysis.get("typography", {})
+    font_name = typo.get("google_fonts_name") or typo.get("font_name") or "sin datos"
     content.append({"type": "text", "text": (
         f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
         f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text y text_prompt):\n"
@@ -410,6 +428,7 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
         f"- Organización        : {subtitle_txt}\n"
         f"{fecha_line}\n"
         f"- Evento              : {evento.get('nombre', '')}\n\n"
+        f"FUENTE DE MARCA (para text_style.font_family): {font_name}\n\n"
         "Genera los 6 conceptos. Incluye estos textos literalmente en award_text y text_prompt."
     )})
 
@@ -440,6 +459,7 @@ def _validar_concepto(c: dict, idx: int) -> dict:
         "text_style":       {
             "text_anchor":     _anchors[idx % 6],
             "layout":          ["stacked", "spread", "staggered", "billboard", "spread", "stacked"][idx % 6],
+            "font_family":     None,
             "margin_h":        0.07,
             "recipient_color": "#FFFFFF",
             "headline_color":  "#FFD700",
