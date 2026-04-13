@@ -479,11 +479,18 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     text_width = max(60, w - 2 * margin_h)
 
     # ── Geometría vertical ───────────────────────────────────────────
-    if layout == "logo_bottom":
+    # Layouts de canvas completo: elementos distribuidos por toda la altura
+    # (headline arriba, recipient al centro, subtitle abajo — sin zona fija bajo el logo)
+    _FULL_CANVAS = {"spread", "staggered", "billboard", "vertical"}
+    if layout in _FULL_CANVAS:
+        y_start = int(h * 0.04)
+        y_end   = int(h * 0.96)
+        sep_y   = None
+    elif layout == "logo_bottom":
         y_start = int(h * 0.06)
         y_end   = int(h * 0.72)
         sep_y   = None
-    else:
+    else:  # stacked
         sep_y   = int(logo_bottom + (h - logo_bottom) * 0.10)
         y_start = sep_y + int(h * 0.03)
         y_end   = int(h * 0.97)
@@ -549,22 +556,22 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style)
     font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style)
 
-    # ── Layouts especiales: spread, staggered, billboard ────────────
-    if layout == "spread":
-        # recipient centrado en la zona, headline arriba, subtitle abajo
-        rec_h   = _h_bloque(recipient, sz_rec)
-        hl_h    = _h_bloque(headline,  sz_hl)
-        sub_h   = _h_bloque(subtitle,  sz_sub)
-        gap     = max(8, int(h * 0.022))
+    # ── Layouts de canvas completo ───────────────────────────────────
 
-        y_rec = y_start + max(0, (zone_h - rec_h) // 2)
-        y_hl  = max(y_start, y_rec - hl_h - gap)
-        y_sub = min(y_end - sub_h, y_rec + rec_h + gap)
-        y_fec = min(y_end, y_sub + sub_h + max(2, gap // 2))
+    if layout == "spread":
+        # Headline: muy arriba · Recipient: centro exacto del canvas · Subtitle: muy abajo
+        # Inspirado en: Danone Institute, AWS — gran espacio vacío entre zonas
+        mg    = int(h * 0.04)
+        rec_h = _h_bloque(recipient, sz_rec)
+
+        y_hl  = mg
+        y_rec = h // 2 - rec_h // 2          # centro absoluto del canvas
+        y_sub = int(h * 0.85)
+        y_fec = int(h * 0.91)
 
         if headline:
             _dibujar_bloque(draw, headline, y_hl, font_hl,
-                            hex_to_rgba(hl_color, 255), x_start, text_width, "center")
+                            hex_to_rgba(hl_color, 220), x_start, text_width, "center")
         if recipient:
             if rec_block:
                 try:
@@ -587,20 +594,20 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         return img
 
     if layout == "staggered":
-        # headline centrado pequeño — recipient ENORME left — subtitle right
-        rec_h   = _h_bloque(recipient, sz_rec)
-        hl_h    = _h_bloque(headline,  sz_hl)
-        sub_h   = _h_bloque(subtitle,  sz_sub)
-        gap     = max(8, int(h * 0.022))
+        # Headline: arriba alineado derecha · Recipient: ENORME izquierda, centro
+        # Subtitle: abajo alineado derecha — composición diagonal / asimétrica extrema
+        # Inspirado en: PepsiCo BAM — tensión visual por asimetría deliberada
+        mg    = int(h * 0.04)
+        rec_h = _h_bloque(recipient, sz_rec)
 
-        y_rec = y_start + max(0, (zone_h - rec_h) // 2)
-        y_hl  = max(y_start, y_rec - hl_h - gap)
-        y_sub = min(y_end - sub_h, y_rec + rec_h + gap)
-        y_fec = min(y_end, y_sub + sub_h + max(2, gap // 2))
+        y_hl  = mg
+        y_rec = h // 2 - rec_h // 2          # centro absoluto del canvas
+        y_sub = int(h * 0.87)
+        y_fec = int(h * 0.92)
 
         if headline:
             _dibujar_bloque(draw, headline, y_hl, font_hl,
-                            hex_to_rgba(hl_color, 200), x_start, text_width, "center")
+                            hex_to_rgba(hl_color, 200), x_start, text_width, "right")
         if recipient:
             _dibujar_bloque(draw, recipient, y_rec, font_rec,
                             hex_to_rgba(rec_color, 255), x_start, text_width, "left")
@@ -612,43 +619,88 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
                             hex_to_rgba(sub_color, 160), x_start, text_width, "right")
         return img
 
+    if layout == "vertical":
+        # Recipient girado 90° CCW ocupa toda la altura del lado derecho
+        # Headline y subtitle quedan en el lado izquierdo (arriba/abajo)
+        # Inspirado en: Enter Der Open Access Award
+        mg     = int(h * 0.04)
+        band_w = int(w * 0.32)        # ancho de la banda de texto vertical
+        v_avail = h - 2 * mg          # longitud disponible para el texto rotado
+
+        # Imagen temporal landscape para dibujar el recipient horizontalmente
+        tmp      = Image.new("RGBA", (v_avail, band_w), (0, 0, 0, 0))
+        tmp_draw = ImageDraw.Draw(tmp)
+
+        font_v = _fuente_optima(tmp_draw, [recipient] if recipient else ["X"],
+                                band_w - 4, v_avail, band_w - 4, font_style)
+
+        if recipient:
+            lines = _wrap_sin_partir(tmp_draw, recipient, font_v, v_avail)
+            lh    = font_v.getbbox("A")[3] + 6
+            tot_h = len(lines) * lh
+            ty    = max(0, (band_w - tot_h) // 2)
+            for i, line in enumerate(lines):
+                tw = _tw(tmp_draw, line, font_v)
+                tx = max(0, (v_avail - tw) // 2)
+                tmp_draw.text((tx, ty + i * lh), line,
+                              fill=hex_to_rgba(rec_color, 255), font=font_v)
+
+        # Rotar 90° CCW → el texto se lee de abajo hacia arriba (efecto lateral)
+        rotated = tmp.rotate(90, expand=True)
+        rx = w - rotated.width - int(w * 0.03)
+        img.paste(rotated, (rx, mg), rotated)
+
+        # Lado izquierdo: headline arriba, subtitle abajo
+        left_w = max(40, rx - x_start - int(w * 0.03))
+        if headline:
+            _dibujar_bloque(draw, headline, mg, font_hl,
+                            hex_to_rgba(hl_color, 220), x_start, left_w, "left")
+        if subtitle:
+            sub_h_px = _h_bloque(subtitle, sz_sub)
+            _dibujar_bloque(draw, subtitle, int(h * 0.87), font_sub,
+                            hex_to_rgba(sub_color, 190), x_start, left_w, "left")
+        if fecha:
+            _dibujar_bloque(draw, fecha, int(h * 0.92), font_sub,
+                            hex_to_rgba(sub_color, 160), x_start, left_w, "left")
+        return img
+
     if layout == "billboard":
-        # recipient llena la zona — headline y subtitle son elementos secundarios mínimos
-        sz_hl_b  = max(6, int(h * 0.038))
-        sz_sub_b = max(5, int(h * 0.030))
+        # Recipient llena prácticamente todo el canvas — headline y subtitle son micro-captions
+        # Inspirado en: Premios Carpa, Booking — el nombre lo es TODO
+        sz_hl_b  = max(6, int(h * 0.036))
+        sz_sub_b = max(5, int(h * 0.028))
         font_hl_b  = _cargar_fuente(sz_hl_b,  font_style)
         font_sub_b = _cargar_fuente(sz_sub_b, font_style)
-        gap = max(6, int(h * 0.018))
+        mg = int(h * 0.04)
 
         hl_h_px  = _h_bloque(headline, sz_hl_b)  if headline else 0
         sub_h_px = _h_bloque(subtitle, sz_sub_b) if subtitle else 0
-        rec_zone = max(20, zone_h - hl_h_px - sub_h_px - gap * 2)
 
-        # Fuente máxima que cabe en la zona del recipient
+        # Zona del recipient: desde bajo el headline hasta sobre el subtitle
+        rec_top  = mg + hl_h_px + int(h * 0.02) if headline else mg
+        rec_bot  = int(h * 0.87) if subtitle else int(h * 0.92)
+        rec_zone = max(20, rec_bot - rec_top)
+
         font_rec_b = _fuente_optima(draw, [recipient] if recipient else ["X"],
-                                    int(h * 0.32), text_width, rec_zone, font_style)
+                                    int(h * 0.34), text_width, rec_zone, font_style)
         if recipient:
             lineas_rec = _wrap_sin_partir(draw, recipient, font_rec_b, text_width)
             rec_h_px   = len(lineas_rec) * (font_rec_b.getbbox("A")[3] + 6)
+            y_rec      = rec_top + max(0, (rec_zone - rec_h_px) // 2)
         else:
-            rec_h_px = 0
-
-        y_hl  = y_start
-        y_rec = (y_start + hl_h_px + gap) if headline else (y_start + max(0, (zone_h - rec_h_px) // 2))
-        y_sub = y_end - sub_h_px
+            y_rec = rec_top
 
         if headline:
-            _dibujar_bloque(draw, headline, y_hl, font_hl_b,
-                            hex_to_rgba(hl_color, 175), x_start, text_width, "center")
+            _dibujar_bloque(draw, headline, mg, font_hl_b,
+                            hex_to_rgba(hl_color, 180), x_start, text_width, "center")
         if recipient:
             _dibujar_bloque(draw, recipient, y_rec, font_rec_b,
                             hex_to_rgba(rec_color, 255), x_start, text_width, "center")
         if subtitle:
-            _dibujar_bloque(draw, subtitle, y_sub, font_sub_b,
-                            hex_to_rgba(sub_color, 155), x_start, text_width, "center")
+            _dibujar_bloque(draw, subtitle, int(h * 0.88), font_sub_b,
+                            hex_to_rgba(sub_color, 160), x_start, text_width, "center")
         if fecha:
-            y_fec = min(y_end, y_sub + sub_h_px + max(2, gap // 2))
-            _dibujar_bloque(draw, fecha, y_fec, font_sub_b,
+            _dibujar_bloque(draw, fecha, int(h * 0.93), font_sub_b,
                             hex_to_rgba(sub_color, 130), x_start, text_width, "center")
         return img
 
@@ -836,7 +888,7 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
     layout   = tc_info.get("layout", "stacked")
     anchor   = tc_info.get("text_anchor", "center")
     print(f"    [LAYOUT] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
-    if capa_dalle.USE_DALLE and text_prompt:
+    if capa_dalle.USE_DALLE and text_prompt and layout != "vertical":
         print(f"    [DALLE-TEXTO] Generando tipografía para propuesta {pid} (layout={layout})...")
         texto_img, bg_hex = capa_dalle.generar_texto_dalle(award, concepto)
         print(f"    [DEBUG] texto_img={texto_img is not None} bg_hex={bg_hex}")

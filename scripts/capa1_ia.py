@@ -101,9 +101,9 @@ DIFERENCIACIÓN OBLIGATORIA entre los 6 conceptos:
      — Algunos: recipient enorme hero (ratio 0.18), otros: tamaño moderado (0.10)
   4. Colores de texto distintos: no repitas la misma combinación en dos conceptos
   5. text_style.text_anchor OBLIGATORIO variado: P1=top, P2=center, P3=bottom,
-     P4=bottom, P5=top, P6=center — sin repetir el mismo anchor en propuestas consecutivas
-  6. text_style.layout OBLIGATORIO variado — los 4 tipos deben aparecer:
-     P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+     P4=bottom, P5=center, P6=top — sin repetir el mismo anchor en propuestas consecutivas
+  6. text_style.layout OBLIGATORIO variado — los 5 tipos deben repartirse:
+     P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=vertical, P6=stacked
      Este campo ES OBLIGATORIO en cada propuesta. No lo omitas nunca.
   7. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
      En fondos OSCUROS usa siempre texto claro (#FFFFFF, #FFD700, #E0E0E0)
@@ -190,24 +190,24 @@ CAMPO text_style.text_anchor — posición vertical del bloque de texto en el ca
   - Propuestas 3, 6: "bottom" (texto en la parte baja, logo arriba)
   Esto garantiza que cada diseño tenga una composición diferente.
 
-CAMPO text_style.layout — distribución espacial del texto dentro de la zona:
-  Tienes 3 opciones. OBLIGATORIO usar las 3 a lo largo de los 6 conceptos:
-  - "stacked"   → bloque compacto estándar (todos los elementos seguidos, verticalmente)
-                  Usar en propuestas con mucho texto o fondos muy cargados.
-  - "spread"    → elementos SEPARADOS en el espacio vertical de forma independiente:
-                  headline arriba, recipient exactamente centrado, subtitle abajo.
-                  Crea respiración y elegancia. Muy efectivo con fondos artísticos.
-  - "staggered" → asimetría deliberada para impacto visual:
-                  headline pequeño centrado (casi invisible), recipient ENORME alineado a la
-                  IZQUIERDA, subtitle pequeño alineado a la DERECHA.
-                  Rompe la simetría de forma intencionada. Uso en conceptos atrevidos.
-  - "billboard" → el nombre del premiado lo es TODO. Se calcula la fuente máxima posible
-                  para que el recipient llene prácticamente toda la zona de texto.
-                  Headline y subtitle son elementos casi invisibles (micro-caption arriba y abajo).
-                  Máximo impacto. El trofeo habla de UNA persona, no de un evento.
-                  Ideal para marcas minimalistas o de lujo.
-  Distribución sugerida: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
-  (lo importante es que aparezcan los 4 tipos al menos una vez — billboard nunca más de una vez)
+CAMPO text_style.layout — distribución espacial del texto en el canvas:
+  Tienes 5 opciones. OBLIGATORIO variar entre los 6 conceptos:
+  - "stacked"   → bloque compacto bajo el logo, posición controlada por text_anchor.
+                  Uso en fondos cargados o cuando el logo domina la composición.
+  - "spread"    → canvas completo: headline en lo alto del trofeo, recipient en el centro
+                  exacto, subtitle/fecha en la parte baja. Gran espacio vacío entre zonas.
+                  Efecto editorial premium (estilo Danone Institute, AWS).
+  - "staggered" → canvas completo + asimetría extrema: headline pequeño alineado DERECHA
+                  arriba, recipient ENORME alineado IZQUIERDA en el centro, subtitle DERECHA
+                  abajo. Tensión visual diagonal. Para marcas atrevidas (estilo PepsiCo BAM).
+  - "billboard" → canvas completo: recipient llena casi todo el trofeo, headline micro-caption
+                  arriba, subtitle micro-caption abajo. El nombre del premiado lo es TODO.
+                  Máximo impacto. Ideal para marcas minimalistas o de lujo.
+  - "vertical"  → recipient girado 90° ocupa toda la altura del lado derecho del trofeo.
+                  Headline y subtitle quedan en el lado izquierdo (arriba y abajo).
+                  Efecto lateral dramático (estilo Enter Award). Para marcas vanguardistas.
+  Distribución obligatoria: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=vertical, P6=stacked
+  (billboard y vertical como máximo una vez cada uno)
 
 JERARQUÍA FIJA: recipient > headline > subtitle (siempre, en todos los conceptos)
 
@@ -526,7 +526,7 @@ def _validar_concepto(c: dict, idx: int) -> dict:
         "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
         "text_style":       {
             "text_anchor":     _anchors[idx % 6],
-            "layout":          ["stacked", "spread", "staggered", "billboard", "spread", "stacked"][idx % 6],
+            "layout":          ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"][idx % 6],
             "font_family":     None,
             "margin_h":        0.07,
             "recipient_color": "#FFFFFF",
