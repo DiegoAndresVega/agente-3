@@ -183,6 +183,7 @@ def _cargar_fuente_marca(size: int, font_family: str | None,
             from scripts.font_manager import get_font_path
             path = get_font_path(font_family, weight)
             if path and path.exists():
+                print(f"  [renderer] Fuente: {path.name} (size={size})")
                 return ImageFont.truetype(str(path), size)
         except Exception as e:
             print(f"  [renderer] Fuente marca no disponible ({font_family} w{weight}): {e}")

@@ -55,7 +55,10 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
   },
   "typography": {
     "style": "sans-serif|serif|display|monospace",
-    "brand_name_length": "corto|medio|largo"
+    "brand_name_length": "corto|medio|largo",
+    "font_name": "nombre exacto de la fuente principal del brandbook (ej: Futura PT, DIN Pro, FF Clan). null si no identificable.",
+    "google_fonts_name": "nombre EXACTO en Google Fonts si la fuente está disponible o tiene equivalente cercano (ej: Montserrat, Raleway, Roboto). null si no hay equivalente razonable.",
+    "google_fonts_weights": [400, 700]
   },
   "graphic_resources": {
     "uses_gradients": false,
@@ -66,10 +69,18 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
 }
 
 Reglas:
-- primary, secondary, accent: del logo/brandbook. Sin inventar.
+- PRIORIDAD DE FUENTES: brandbook PDF > logo > web corporativa. Si hay brandbook, úsalo como verdad absoluta.
+- Si recibes "FUENTE CORPORATIVA DISPONIBLE LOCALMENTE: 'X'", escribe X exactamente en typography.font_name Y en typography.google_fonts_name. No uses equivalente ni busques alternativa.
+- Si recibes "EXTRACCIÓN AUTOMÁTICA DEL BRANDBOOK", esos colores HEX son los colores REALES del brandbook — úsalos directamente en primary, secondary, accent. No los ignores.
+- primary: el color corporativo principal (el más prominente/frecuente en el brandbook).
+- secondary: el segundo color más corporativo. Si el brandbook tiene varios secundarios, elige el más diferenciado del primario.
+- accent: color de acento o de líneas especializadas (sub-marcas, categorías) si existe. null si no hay.
 - primary_tint: mezcla primario con blanco (35%). Calcula el HEX.
 - primary_shade: mezcla primario con negro (30%). Calcula el HEX.
 - Si no hay brandbook ni web, deduce todo del logo.
+- typography.font_name: extrae el nombre exacto de la fuente principal mencionada en el brandbook. null si no hay mención explícita.
+- typography.google_fonts_name: si esa fuente está en Google Fonts o tiene equivalente cercano, escribe el nombre exacto como aparece en fonts.google.com (mayúsculas exactas). null si no hay equivalente razonable.
+- typography.google_fonts_weights: siempre [400, 700] como mínimo.
 - Responde SOLO con el JSON.\
 """
 
@@ -91,9 +102,12 @@ DIFERENCIACIÓN OBLIGATORIA entre los 6 conceptos:
   4. Colores de texto distintos: no repitas la misma combinación en dos conceptos
   5. text_style.text_anchor OBLIGATORIO variado: P1=top, P2=center, P3=bottom,
      P4=bottom, P5=top, P6=center — sin repetir el mismo anchor en propuestas consecutivas
-  6. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
+  6. text_style.layout OBLIGATORIO variado — los 4 tipos deben aparecer:
+     P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+     Este campo ES OBLIGATORIO en cada propuesta. No lo omitas nunca.
+  7. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
      En fondos OSCUROS usa siempre texto claro (#FFFFFF, #FFD700, #E0E0E0)
-  7. Uso del logo CREATIVO y variado — elige entre estas opciones:
+  8. Uso del logo CREATIVO y variado — elige entre estas opciones:
      - "blanco"    → logo en blanco, para fondos oscuros (clásico)
      - "negro"     → logo en negro, para fondos claros o blancos
      - "color"     → logo en colores originales de marca, para fondos neutros/claros
@@ -135,18 +149,39 @@ CAMPO text_prompt — SOLO LA TIPOGRAFÍA DEL GALARDÓN:
   Ejemplos de text_prompt bien escritos:
     "Ultra-bold condensed sans-serif award typography. Recipient 'OFESAUTO' at massive hero
      scale, white #FFFFFF with subtle gold outer glow. Award title 'Empresa Comprometida
-     con la Seguridad' at medium size, gold #FFD700. Organization 'Sustain Awards 2025'
+     con la Seguridad' at medium size, gold #FFD700. Organization 'Juaneda Hospitales'
      at small caption size, light gray #AAAAAA. Dramatic size contrast between levels."
 
     "Elegant serif editorial layout. Recipient 'EMPRESA EJEMPLO' at large italic hero scale,
      deep navy #1A237E bold. Award title 'Premio Sostenibilidad' at medium regular weight,
-     dark gray #555555. Organization 'Sustain Awards' at small light caption, gray #888888.
+     dark gray #555555. Organization 'Nombre del Cliente' at small light caption, gray #888888.
      Refined institutional feel, generous spacing."
+
+REGLA CRÍTICA — subtitle (organización):
+  El subtitle SIEMPRE es el nombre del cliente/empresa premiada (brand_name del análisis).
+  NUNCA escribas el nombre de la empresa organizadora del evento ni ninguna marca de premios.
+  Si no sabes el nombre del cliente, usa el brand_name del análisis de marca.
+
+REGLA CRÍTICA — contraste de texto:
+  - Fondo OSCURO (bg_tone=dark): recipient y headline en colores MUY CLAROS (#FFFFFF, #FFD700, #E0E0E0).
+    NUNCA uses gris medio o colores apagados sobre fondo oscuro.
+  - Fondo CLARO (bg_tone=light): recipient y headline en colores MUY OSCUROS (#000000, #1A1A1A, primario de marca).
+    NUNCA uses gris claro, blanco ni colores pálidos sobre fondo claro.
+  - Fondo MEDIO (bg_tone=mid): usa el color primario de la marca si tiene suficiente contraste,
+    o negro/blanco según la luminancia del fondo.
+  El contraste mínimo aceptable es 4.5:1 (WCAG AA). Textos ilegibles arruinan el diseño.
 
 CAMPO text_bg_dark — fondo para generación del texto:
   - true  → el texto es CLARO (blanco, dorado, plateado) → fondo negro para generación
   - false → el texto es OSCURO (azul, negro, gris oscuro) → fondo blanco para generación
   Regla: si el recipient en text_prompt es de color claro → true. Si es oscuro → false.
+
+CAMPO text_style.font_family — fuente de marca para el renderizado:
+  - Copia aquí el valor de typography.google_fonts_name del análisis de marca.
+  - Si es null en el análisis, escribe null aquí. No inventes ni supongas fuentes.
+  - Esta fuente se descarga de Google Fonts y se usa para el renderizado PIL (fallback).
+  - También menciónala en text_prompt: añade "rendered in [FontName] typeface" al estilo.
+  - Es IGUAL en los 6 conceptos — es la fuente corporativa, no varía por propuesta.
 
 CAMPO text_style.text_anchor — posición vertical del bloque de texto en el canvas:
   OBLIGATORIO variar entre las 6 propuestas. Distribución sugerida:
@@ -166,8 +201,13 @@ CAMPO text_style.layout — distribución espacial del texto dentro de la zona:
                   headline pequeño centrado (casi invisible), recipient ENORME alineado a la
                   IZQUIERDA, subtitle pequeño alineado a la DERECHA.
                   Rompe la simetría de forma intencionada. Uso en conceptos atrevidos.
-  Distribución sugerida: P1=stacked, P2=spread, P3=staggered, P4=stacked, P5=spread, P6=staggered
-  (o variación similar — lo importante es que aparezcan los 3 tipos al menos una vez)
+  - "billboard" → el nombre del premiado lo es TODO. Se calcula la fuente máxima posible
+                  para que el recipient llene prácticamente toda la zona de texto.
+                  Headline y subtitle son elementos casi invisibles (micro-caption arriba y abajo).
+                  Máximo impacto. El trofeo habla de UNA persona, no de un evento.
+                  Ideal para marcas minimalistas o de lujo.
+  Distribución sugerida: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+  (lo importante es que aparezcan los 4 tipos al menos una vez — billboard nunca más de una vez)
 
 JERARQUÍA FIJA: recipient > headline > subtitle (siempre, en todos los conceptos)
 
@@ -184,8 +224,8 @@ Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
     "bg_tone": "dark|light|mid",
     "color_overlay": { "active": false, "color": "#HEX de marca", "opacity": 0.10 },
     "logo": { "treatment": "blanco|negro|color|watermark|banda", "position": "top_center|top_left|top_right|center|bottom_center", "scale": 0.55, "opacity": 0.15, "band_color": "#HEX o null" },
-    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered" },
-    "award_text": { "headline": "...", "recipient": "...", "subtitle": "..." }
+    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered|billboard", "font_family": "Google Fonts name o null" },
+    "award_text": { "headline": "nombre del premio", "recipient": "nombre del premiado", "subtitle": "nombre del cliente (brand_name) — NUNCA el nombre del organizador del evento" }
   },
   { "proposal_id": 2, ... },
   { "proposal_id": 3, ... },
@@ -325,19 +365,55 @@ def _llamar_claude(mensajes: list[dict], system_prompt: str,
 def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
     content = []
 
-    if brand_context["logo_b64"]:
+    tiene_logo    = bool(brand_context.get("logo_b64"))
+    pdf_imagenes  = brand_context.get("pdf_imagenes", [])
+    tiene_pdf     = len(pdf_imagenes) > 0
+    tiene_resumen = bool(brand_context.get("pdf_resumen"))
+    tiene_url     = bool(brand_context.get("url_data", {}).get("ok"))
+
+    print(f"  [ClaudeA] Fuentes de identidad visual disponibles:")
+    print(f"    Logo              : {'✓' if tiene_logo else '✗'}")
+    print(f"    Brandbook (visual): {'✓ (' + str(len(pdf_imagenes)) + ' páginas como imágenes)' if tiene_pdf else '✗'}")
+    print(f"    Brandbook (texto) : {'✓ (colores/fuentes de todas las páginas)' if tiene_resumen else '✗'}")
+    print(f"    Web corporativa   : {'✓' if tiene_url else '✗'}")
+
+    if tiene_logo:
         content.append({"type": "image", "source": {
             "type": "base64",
             "media_type": brand_context["logo_type"],
             "data": brand_context["logo_b64"],
         }})
 
-    if brand_context["pdf_b64"]:
-        content.append({"type": "document", "source": {
-            "type": "base64",
-            "media_type": brand_context["pdf_type"],
-            "data": brand_context["pdf_b64"],
-        }, "title": "Manual de Identidad"})
+    # Páginas del brandbook como imágenes JPEG independientes
+    if tiene_pdf:
+        for idx, img_b64 in enumerate(pdf_imagenes):
+            content.append({"type": "image", "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": img_b64,
+            }})
+
+    # Resumen de texto extraído del PDF (colores HEX, Pantone, fuentes de TODAS las páginas)
+    # Esto garantiza que Claude vea la paleta aunque esté en páginas no incluidas visualmente
+    if tiene_resumen:
+        content.append({"type": "text", "text": (
+            "EXTRACCIÓN AUTOMÁTICA DEL BRANDBOOK (texto de TODAS las páginas del PDF):\n"
+            "Usa estos colores y fuentes como la fuente de verdad principal para el análisis.\n\n"
+            + brand_context["pdf_resumen"]
+        )})
+
+    # Si hay fuente local disponible (subida o extraída del PDF), informar a Claude
+    fuente_local = (
+        brand_context.get("fuente_upload") or
+        next(iter(brand_context.get("fuentes_pdf", {})), None)
+    )
+    if fuente_local:
+        content.append({"type": "text", "text": (
+            f"FUENTE CORPORATIVA DISPONIBLE LOCALMENTE: '{fuente_local}'\n"
+            "Esta fuente ya está instalada en el sistema. Úsala EXACTAMENTE tal como aparece "
+            "en typography.font_name y typography.google_fonts_name. No busques equivalente."
+        )})
+        print(f"  [ClaudeA] Fuente local disponible: '{fuente_local}'")
 
     url_data = brand_context.get("url_data", {})
     url_texto = ""
@@ -346,6 +422,7 @@ def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
             f"\nWEB CORPORATIVA ({url_data.get('url', '')}):\n"
             f"- Colores: {', '.join(url_data.get('colores_detectados', [])[:6])}\n"
             f"- Estilo: {url_data.get('descripcion_estilo', '—')}\n"
+            "(Nota: la web tiene menor prioridad que el brandbook PDF)\n"
         )
 
     award  = pedido.get("award", {})
@@ -354,7 +431,8 @@ def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
         f"DATOS:\n- Empresa: {pedido.get('id_cliente', '—')}\n"
         f"- Evento: {evento.get('nombre', '—')}\n"
         f"- Premio: {award.get('headline', '—')}\n{url_texto}"
-        "Analiza los assets y extrae el vocabulario visual."
+        "PRIORIDAD: brandbook PDF > logo > web corporativa.\n"
+        "Analiza los assets y extrae el vocabulario visual completo."
     )})
 
     resultado = _llamar_claude(
@@ -363,6 +441,17 @@ def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
         "BrandAnalysis",
         temperatura=0.3,  # análisis preciso → temperatura baja
     )
+
+    if isinstance(resultado, dict):
+        colores = resultado.get("colors", {})
+        typo    = resultado.get("typography", {})
+        print(f"  [ClaudeA] Resultado brand analysis:")
+        print(f"    Marca     : {resultado.get('brand_name', '—')}")
+        print(f"    Primario  : {colores.get('primary', '—')}")
+        print(f"    Secundario: {colores.get('secondary', '—')}")
+        print(f"    Acento    : {colores.get('accent', '—')}")
+        print(f"    Fuente    : {typo.get('font_name', '—')} → Google Fonts: {typo.get('google_fonts_name', '—')}")
+
     return resultado if isinstance(resultado, dict) else {}
 
 
@@ -397,6 +486,8 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
     headline_txt  = award.get('headline')  or 'Excellence Award'
     subtitle_txt  = award.get('subtitle')  or 'Sustain Awards'
     fecha_line = f"\n- Fecha/Año   : {award.get('fecha', '')}" if award.get("fecha") else ""
+    typo      = brand_analysis.get("typography", {})
+    font_name = typo.get("google_fonts_name") or typo.get("font_name") or "sin datos"
     content.append({"type": "text", "text": (
         f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
         f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text y text_prompt):\n"
@@ -405,6 +496,7 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
         f"- Organización        : {subtitle_txt}\n"
         f"{fecha_line}\n"
         f"- Evento              : {evento.get('nombre', '')}\n\n"
+        f"FUENTE DE MARCA (para text_style.font_family): {font_name}\n\n"
         "Genera los 6 conceptos. Incluye estos textos literalmente en award_text y text_prompt."
     )})
 
@@ -434,7 +526,8 @@ def _validar_concepto(c: dict, idx: int) -> dict:
         "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
         "text_style":       {
             "text_anchor":     _anchors[idx % 6],
-            "layout":          ["stacked", "spread", "staggered", "stacked", "spread", "staggered"][idx % 6],
+            "layout":          ["stacked", "spread", "staggered", "billboard", "spread", "stacked"][idx % 6],
+            "font_family":     None,
             "margin_h":        0.07,
             "recipient_color": "#FFFFFF",
             "headline_color":  "#FFD700",
