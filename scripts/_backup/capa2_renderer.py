@@ -621,11 +621,11 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
 
     if layout == "vertical":
         # Recipient girado 90° CCW ocupa toda la altura del lado derecho
-        # Headline y subtitle quedan en el lado izquierdo (arriba/abajo)
+        # Headline y subtitle quedan en el lado izquierdo (debajo del logo / muy abajo)
         # Inspirado en: Enter Der Open Access Award
         mg     = int(h * 0.04)
-        band_w = int(w * 0.32)        # ancho de la banda de texto vertical
-        v_avail = h - 2 * mg          # longitud disponible para el texto rotado
+        band_w = int(w * 0.28)         # banda más estrecha → más espacio al lado izquierdo
+        v_avail = h - 2 * mg
 
         # Imagen temporal landscape para dibujar el recipient horizontalmente
         tmp      = Image.new("RGBA", (v_avail, band_w), (0, 0, 0, 0))
@@ -650,17 +650,26 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         rx = w - rotated.width - int(w * 0.03)
         img.paste(rotated, (rx, mg), rotated)
 
-        # Lado izquierdo: headline arriba, subtitle abajo
+        # Lado izquierdo: ancho real disponible entre margen y la banda vertical
         left_w = max(40, rx - x_start - int(w * 0.03))
+
+        # Headline: empieza DEBAJO del logo para no solaparse con él
+        hl_top = max(mg, logo_bottom + int(h * 0.025))
         if headline:
-            _dibujar_bloque(draw, headline, mg, font_hl,
+            # Auto-tamaño: garantiza que ninguna palabra desborde left_w
+            font_hl_v = _fuente_optima(draw, [headline], sz_hl,
+                                       left_w, int(h * 0.20), font_style)
+            _dibujar_bloque(draw, headline, hl_top, font_hl_v,
                             hex_to_rgba(hl_color, 220), x_start, left_w, "left")
+
         if subtitle:
-            sub_h_px = _h_bloque(subtitle, sz_sub)
-            _dibujar_bloque(draw, subtitle, int(h * 0.87), font_sub,
+            # Auto-tamaño subtitle también
+            font_sub_v = _fuente_optima(draw, [subtitle], sz_sub,
+                                        left_w, int(h * 0.10), font_style)
+            _dibujar_bloque(draw, subtitle, int(h * 0.85), font_sub_v,
                             hex_to_rgba(sub_color, 190), x_start, left_w, "left")
         if fecha:
-            _dibujar_bloque(draw, fecha, int(h * 0.92), font_sub,
+            _dibujar_bloque(draw, fecha, int(h * 0.91), font_sub,
                             hex_to_rgba(sub_color, 160), x_start, left_w, "left")
         return img
 
@@ -903,9 +912,14 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
                 tc       = concepto.get("text_style", {})
                 margin_h = int(w * float(tc.get("margin_h", 0.07)))
                 anchor   = tc.get("text_anchor", "center")
-                sep_y    = int(logo_bottom + (h - logo_bottom) * 0.10)
-                y_start  = sep_y + int(h * 0.03)
-                y_end    = int(h * 0.97)
+                # Layouts de canvas completo → zona de composición = canvas entero
+                if layout in {"spread", "staggered", "billboard"}:
+                    y_start = int(h * 0.04)
+                    y_end   = int(h * 0.96)
+                else:
+                    sep_y   = int(logo_bottom + (h - logo_bottom) * 0.10)
+                    y_start = sep_y + int(h * 0.03)
+                    y_end   = int(h * 0.97)
                 print(f"    [CHROMA OK] composición en y={y_start}..{y_end}")
                 img = _componer_capa_texto(texto_rgba, img, y_start, y_end, margin_h, anchor, w)
             else:
