@@ -134,29 +134,6 @@ CAMPO dalle_prompt — SOLO EL FONDO ARTÍSTICO:
      Editorial minimalist composition, soft shadows on the band edges.
      No text, no logos, no people. Premium award background."
 
-CAMPO text_prompt — SOLO LA TIPOGRAFÍA DEL GALARDÓN:
-  - En INGLÉS, describe ÚNICAMENTE el tratamiento tipográfico
-  - Incluye los textos LITERALES del galardón con jerarquía visual explícita:
-      → recipient (nombre del premiado): HERO SIZE, el elemento más grande
-      → headline (nombre del premio): tamaño medio
-      → subtitle (organización): pequeño, discreto
-  - Especifica: peso tipográfico, familia (serif/sans-serif/display), tratamiento visual
-    (embossed, glowing, metallic, engraved, editorial, reversed, outlined, etc.)
-  - Especifica colores HEX exactos para cada nivel
-  - NO menciones el fondo ni colores de fondo
-  - Orientación vertical, texto centrado
-
-  Ejemplos de text_prompt bien escritos:
-    "Ultra-bold condensed sans-serif award typography. Recipient 'OFESAUTO' at massive hero
-     scale, white #FFFFFF with subtle gold outer glow. Award title 'Empresa Comprometida
-     con la Seguridad' at medium size, gold #FFD700. Organization 'Juaneda Hospitales'
-     at small caption size, light gray #AAAAAA. Dramatic size contrast between levels."
-
-    "Elegant serif editorial layout. Recipient 'EMPRESA EJEMPLO' at large italic hero scale,
-     deep navy #1A237E bold. Award title 'Premio Sostenibilidad' at medium regular weight,
-     dark gray #555555. Organization 'Nombre del Cliente' at small light caption, gray #888888.
-     Refined institutional feel, generous spacing."
-
 REGLA CRÍTICA — subtitle (organización):
   El subtitle SIEMPRE es el nombre del cliente/empresa premiada (brand_name del análisis).
   NUNCA escribas el nombre de la empresa organizadora del evento ni ninguna marca de premios.
@@ -171,24 +148,52 @@ REGLA CRÍTICA — contraste de texto:
     o negro/blanco según la luminancia del fondo.
   El contraste mínimo aceptable es 4.5:1 (WCAG AA). Textos ilegibles arruinan el diseño.
 
-CAMPO text_bg_dark — fondo para generación del texto:
-  - true  → el texto es CLARO (blanco, dorado, plateado) → fondo negro para generación
-  - false → el texto es OSCURO (azul, negro, gris oscuro) → fondo blanco para generación
-  Regla: si el recipient en text_prompt es de color claro → true. Si es oscuro → false.
+DIRECCIÓN TIPOGRÁFICA — eres el tipógrafo del proyecto:
+  El sistema renderiza el texto con la fuente de marca exacta. Tú decides cómo se ve
+  cada elemento en cada propuesta. Varía radicalmente entre las 6 propuestas.
 
-CAMPO text_style.font_family — fuente de marca para el renderizado:
-  - Copia aquí el valor de typography.google_fonts_name del análisis de marca.
-  - Si es null en el análisis, escribe null aquí. No inventes ni supongas fuentes.
-  - Esta fuente se descarga de Google Fonts y se usa para el renderizado PIL (fallback).
-  - También menciónala en text_prompt: añade "rendered in [FontName] typeface" al estilo.
-  - Es IGUAL en los 6 conceptos — es la fuente corporativa, no varía por propuesta.
+  FUENTE (font_family):
+    - Usa el valor de typography.google_fonts_name del análisis. Si es null, escribe null.
+    - Es la misma en los 6 conceptos (es la fuente corporativa de la marca).
 
-CAMPO text_style.text_anchor — posición vertical del bloque de texto en el canvas:
-  OBLIGATORIO variar entre las 6 propuestas. Distribución sugerida:
-  - Propuestas 1, 4: "top"    (texto en la parte alta, logo abajo o pequeño arriba)
-  - Propuestas 2, 5: "center" (texto centrado verticalmente)
-  - Propuestas 3, 6: "bottom" (texto en la parte baja, logo arriba)
-  Esto garantiza que cada diseño tenga una composición diferente.
+  TAMAÑOS — crea contraste expresivo (recipient debe ser 3–5× mayor que subtitle):
+    recipient_size_ratio : 0.08–0.22  (nombre del premiado — varía dramáticamente)
+    headline_size_ratio  : 0.035–0.08 (título del premio)
+    subtitle_size_ratio  : 0.025–0.05 (organización — siempre el más pequeño)
+    Ejemplos de contraste fuerte: rec=0.20/hl=0.045/sub=0.030 (billboard ultra)
+                                  rec=0.14/hl=0.070/sub=0.042 (editorial equilibrado)
+                                  rec=0.10/hl=0.055/sub=0.032 (compacto elegante)
+
+  ALINEACIONES — independientes por elemento, créalas para reforzar el layout:
+    recipient_alignment / headline_alignment / subtitle_alignment : "left"|"center"|"right"
+    Combinaciones con personalidad:
+    - Todo centrado → formal, institucional (Danone, AWS)
+    - hl=right / rec=left / sub=right → diagonal, moderno (PepsiCo BAM)
+    - Todo left → editorial, minimalista (Enter Award)
+    - hl=left / rec=center / sub=left → híbrido premium
+    - hl=center / rec=center / sub=right → jerárquico asimétrico
+
+  COLORES (HEX exactos — SIEMPRE verificar contraste con bg_tone):
+    recipient_color: el más prominente — puede ser el primario de marca o blanco/dorado
+    headline_color : secundario — dorado #C9A84C, plateado #B0B8C1, o color de acento
+    subtitle_color : el más discreto — gris o tono medio con baja presencia visual
+    Fondo OSCURO: recipient claro (#FFF, #FFD700, primario claro) + headline gold/silver
+    Fondo CLARO: recipient muy oscuro (primario, #111) + headline primario o #333
+    Fondo MEDIO: recipient primario de marca + headline blanco/negro según contraste
+
+  MAYÚSCULAS:
+    recipient_uppercase: true  → impacto, modernidad (marcas geométricas, deportivas, tech)
+    recipient_uppercase: false → elegancia, cercanía (marcas naturales, sanitarias, culturales)
+
+  ESPACIADO:
+    spacing_scale: 0.5 (bloque denso, impactante) | 1.0 (estándar) | 1.8 (aireado, lujoso)
+
+CAMPO text_style.text_anchor — posición del bloque stacked en el canvas:
+  (En layouts spread/staggered/billboard/vertical el sistema lo ignora — posiciona automáticamente)
+  - "top"    → texto en la parte alta
+  - "center" → centrado verticalmente
+  - "bottom" → texto en la parte baja
+  Distribución: P1=top, P2=center, P3=bottom, P4=bottom, P5=center, P6=top
 
 CAMPO text_style.layout — distribución espacial del texto en el canvas:
   Tienes 5 opciones. OBLIGATORIO variar entre los 6 conceptos:
@@ -219,12 +224,25 @@ Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
     "pattern_name": "nombre evocador 2-3 palabras",
     "design_rationale": "por qué este concepto encaja con la marca (1 frase)",
     "dalle_prompt": "English — ONLY artistic background, NO text, NO logos...",
-    "text_prompt": "English — typography style + literal award texts + colors + hierarchy...",
-    "text_bg_dark": true,
     "bg_tone": "dark|light|mid",
     "color_overlay": { "active": false, "color": "#HEX de marca", "opacity": 0.10 },
     "logo": { "treatment": "blanco|negro|color|watermark|banda", "position": "top_center|top_left|top_right|center|bottom_center", "scale": 0.55, "opacity": 0.15, "band_color": "#HEX o null" },
-    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered|billboard", "font_family": "Google Fonts name o null" },
+    "text_style": {
+      "text_anchor": "top|center|bottom",
+      "layout": "stacked|spread|staggered|billboard|vertical",
+      "font_family": "nombre exacto fuente de marca o null",
+      "recipient_color": "#HEX",
+      "headline_color": "#HEX",
+      "subtitle_color": "#HEX",
+      "recipient_size_ratio": 0.16,
+      "headline_size_ratio": 0.065,
+      "subtitle_size_ratio": 0.040,
+      "recipient_alignment": "left|center|right",
+      "headline_alignment": "left|center|right",
+      "subtitle_alignment": "left|center|right",
+      "recipient_uppercase": false,
+      "spacing_scale": 1.0
+    },
     "award_text": { "headline": "nombre del premio", "recipient": "nombre del premiado", "subtitle": "nombre del cliente (brand_name) — NUNCA el nombre del organizador del evento" }
   },
   { "proposal_id": 2, ... },
@@ -514,24 +532,43 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
 def _validar_concepto(c: dict, idx: int) -> dict:
     # text_anchor rota entre top/center/bottom para garantizar variedad entre propuestas
     _anchors = ["top", "center", "bottom", "top", "center", "bottom"]
+    _layouts  = ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"]
+    _rec_cols = ["#FFFFFF", "#FFD700", "#FFFFFF", "#FFD700", "#FFFFFF", "#E0E0E0"]
+    _hl_cols  = ["#FFD700", "#FFFFFF", "#FFFFFF", "#E0E0E0", "#FFD700", "#FFFFFF"]
+    _sub_cols = ["#BBBBBB", "#AAAAAA", "#CCCCCC", "#999999", "#AAAAAA", "#BBBBBB"]
+    _hl_alns  = ["center",  "left",   "right",   "center",  "left",   "center"]
+    _rec_alns = ["center",  "center", "left",    "center",  "center", "center"]
+    _sub_alns = ["center",  "left",   "right",   "center",  "left",   "center"]
+    _rec_sz   = [0.16,      0.14,     0.18,      0.20,      0.15,     0.12]
+    _hl_sz    = [0.065,     0.070,    0.045,     0.038,     0.060,    0.055]
+    _sub_sz   = [0.040,     0.038,    0.030,     0.028,     0.035,    0.032]
+    _spacing  = [1.0,       1.6,      0.8,       0.6,       1.2,      1.0]
+    _upper    = [False,     False,    True,      True,      False,    False]
+    i6 = idx % 6
     defaults = {
         "proposal_id":      idx + 1,
         "pattern_name":     f"Concepto {idx + 1}",
         "design_rationale": "Diseño corporativo premium.",
         "dalle_prompt":     "Deep navy abstract corporate background, geometric shapes, premium. No text, no logos, no people. Premium award background.",
-        "text_prompt":      "Bold corporate sans-serif award typography. Recipient name at massive hero scale, white #FFFFFF. Award title at medium size, gold #FFD700. Organization at small caption size, light gray #BBBBBB. Dramatic size contrast between levels.",
-        "text_bg_dark":     True,
         "bg_tone":          "dark",
         "color_overlay":    {"active": False, "color": "#1A1A1A", "opacity": 0.15},
         "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
         "text_style":       {
-            "text_anchor":     _anchors[idx % 6],
-            "layout":          ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"][idx % 6],
-            "font_family":     None,
-            "margin_h":        0.07,
-            "recipient_color": "#FFFFFF",
-            "headline_color":  "#FFD700",
-            "subtitle_color":  "#BBBBBB",
+            "text_anchor":          _anchors[i6],
+            "layout":               _layouts[i6],
+            "font_family":          None,
+            "margin_h":             0.07,
+            "recipient_color":      _rec_cols[i6],
+            "headline_color":       _hl_cols[i6],
+            "subtitle_color":       _sub_cols[i6],
+            "recipient_size_ratio": _rec_sz[i6],
+            "headline_size_ratio":  _hl_sz[i6],
+            "subtitle_size_ratio":  _sub_sz[i6],
+            "recipient_alignment":  _rec_alns[i6],
+            "headline_alignment":   _hl_alns[i6],
+            "subtitle_alignment":   _sub_alns[i6],
+            "recipient_uppercase":  _upper[i6],
+            "spacing_scale":        _spacing[i6],
         },
         "award_text":       {"headline": "Excellence Award", "recipient": "Nombre Apellido", "subtitle": "Organización"},
     }

@@ -521,6 +521,10 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     subtitle  = award.get("subtitle", "")
     fecha     = str(award.get("fecha", "")) if award.get("fecha") else ""
 
+    # Mayúsculas si Claude lo especifica (impacto geométrico en marcas modernas)
+    if tc.get("recipient_uppercase") and recipient:
+        recipient = recipient.upper()
+
     # ── Tamaños de fuente ────────────────────────────────────────────
     sz_hl  = max(8, int(h * float(tc.get("headline_size_ratio",  0.065))))
     sz_rec = max(8, int(h * float(tc.get("recipient_size_ratio", 0.16))))
@@ -560,7 +564,7 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
 
     if layout == "spread":
         # Headline: muy arriba · Recipient: centro exacto del canvas · Subtitle: muy abajo
-        # Inspirado en: Danone Institute, AWS — gran espacio vacío entre zonas
+        # Cada elemento usa la alineación que Claude especificó — crea tensión tipográfica
         mg    = int(h * 0.04)
         rec_h = _h_bloque(recipient, sz_rec)
 
@@ -571,7 +575,7 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
 
         if headline:
             _dibujar_bloque(draw, headline, y_hl, font_hl,
-                            hex_to_rgba(hl_color, 220), x_start, text_width, "center")
+                            hex_to_rgba(hl_color, 220), x_start, text_width, hl_align)
         if recipient:
             if rec_block:
                 try:
@@ -584,13 +588,13 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
                 except Exception:
                     pass
             _dibujar_bloque(draw, recipient, y_rec, font_rec,
-                            hex_to_rgba(rec_color, 255), x_start, text_width, "center")
+                            hex_to_rgba(rec_color, 255), x_start, text_width, rec_align)
         if subtitle:
             _dibujar_bloque(draw, subtitle, y_sub, font_sub,
-                            hex_to_rgba(sub_color, 190), x_start, text_width, "center")
+                            hex_to_rgba(sub_color, 190), x_start, text_width, sub_align)
         if fecha:
             _dibujar_bloque(draw, fecha, y_fec, font_sub,
-                            hex_to_rgba(sub_color, 160), x_start, text_width, "center")
+                            hex_to_rgba(sub_color, 160), x_start, text_width, sub_align)
         return img
 
     if layout == "staggered":
@@ -864,18 +868,15 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
                       fuentes: dict | None = None,
                       seed: int = 42) -> Image.Image:
     """
-    Renderiza un diseño completo con pipeline dual OpenAI:
+    Renderiza un diseño completo:
       1. gpt-image-1 genera el fondo artístico (dalle_prompt — sin texto)
       2. Overlay ligero de color de marca (coherencia cromática)
-      3. Logo exacto encima (PIL) — la marca la gestiona Claude, no OpenAI
-      4. gpt-image-1 genera la tipografía sobre fondo sólido (text_prompt)
-         PIL extrae el texto con chroma key y lo compone sobre el fondo
-      Fallback: _render_texto (PIL) si DALLE falla o USE_DALLE=False
+      3. Logo exacto encima (PIL)
+      4. Texto con PIL — tipografía dirigida por Claude (tamaños, colores, layout)
     """
     from scripts import capa_dalle
 
     dalle_prompt   = concepto.get("dalle_prompt", "")
-    text_prompt    = concepto.get("text_prompt",  "")
     color_fallback = concepto.get("color_overlay", {}).get("color", "#1A1A2E")
     pid = concepto.get("proposal_id", "?")
 
@@ -892,44 +893,11 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
     if concepto.get("logo", {}).get("position") == "bottom_center":
         logo_bottom = int(h * 0.04)
 
-    # ── Paso 4: Texto del galardón ────────────────────────────────────
-    tc_info  = concepto.get("text_style", {})
-    layout   = tc_info.get("layout", "stacked")
-    anchor   = tc_info.get("text_anchor", "center")
-    print(f"    [LAYOUT] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
-    if capa_dalle.USE_DALLE and text_prompt and layout != "vertical":
-        print(f"    [DALLE-TEXTO] Generando tipografía para propuesta {pid} (layout={layout})...")
-        texto_img, bg_hex = capa_dalle.generar_texto_dalle(award, concepto)
-        print(f"    [DEBUG] texto_img={texto_img is not None} bg_hex={bg_hex}")
-
-        if texto_img is not None and bg_hex is not None:
-            print(f"    [CHROMA]      Extrayendo texto (bg={bg_hex})...")
-            texto_rgba = _extraer_texto_chroma(texto_img, bg_hex, threshold=40)
-            arr_t  = np.array(texto_rgba)
-            opaque = int((arr_t[:, :, 3] > 30).sum())
-            print(f"    [DEBUG] píxeles opacos tras chroma key: {opaque}")
-            if opaque > 500:
-                tc       = concepto.get("text_style", {})
-                margin_h = int(w * float(tc.get("margin_h", 0.07)))
-                anchor   = tc.get("text_anchor", "center")
-                # Layouts de canvas completo → zona de composición = canvas entero
-                if layout in {"spread", "staggered", "billboard"}:
-                    y_start = int(h * 0.04)
-                    y_end   = int(h * 0.96)
-                else:
-                    sep_y   = int(logo_bottom + (h - logo_bottom) * 0.10)
-                    y_start = sep_y + int(h * 0.03)
-                    y_end   = int(h * 0.97)
-                print(f"    [CHROMA OK] composición en y={y_start}..{y_end}")
-                img = _componer_capa_texto(texto_rgba, img, y_start, y_end, margin_h, anchor, w)
-            else:
-                print(f"    [FALLBACK] chroma vacío ({opaque} px) → PIL para propuesta {pid}")
-                img = _render_texto(concepto, img, award, w, h, logo_bottom)
-        else:
-            print(f"    [FALLBACK] DALLE-texto falló → PIL para propuesta {pid}")
-            img = _render_texto(concepto, img, award, w, h, logo_bottom)
-    else:
-        print(f"    [FALLBACK] PIL (USE_DALLE=False o sin text_prompt) para propuesta {pid}")
-        img = _render_texto(concepto, img, award, w, h, logo_bottom)
+    # ── Paso 4: Texto — siempre PIL (tipografía dirigida por Claude) ─────────
+    tc_info = concepto.get("text_style", {})
+    layout  = tc_info.get("layout", "stacked")
+    anchor  = tc_info.get("text_anchor", "center")
+    print(f"    [TEXTO-PIL] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
+    img = _render_texto(concepto, img, award, w, h, logo_bottom)
 
     return img

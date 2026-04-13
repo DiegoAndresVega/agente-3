@@ -45,6 +45,7 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
     "primary": "#HEX",
     "secondary": "#HEX",
     "accent": "#HEX o null",
+    "colors_extended": ["#HEX1", "#HEX2", "...hasta 6 colores de la paleta completa de marca"],
     "background_light": "#HEX (tono claro para fondos)",
     "background_dark": "#HEX (tono oscuro premium)",
     "text_on_dark": "#HEX (contraste sobre fondos oscuros)",
@@ -71,10 +72,13 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
 Reglas:
 - PRIORIDAD DE FUENTES: brandbook PDF > logo > web corporativa. Si hay brandbook, úsalo como verdad absoluta.
 - Si recibes "FUENTE CORPORATIVA DISPONIBLE LOCALMENTE: 'X'", escribe X exactamente en typography.font_name Y en typography.google_fonts_name. No uses equivalente ni busques alternativa.
-- Si recibes "EXTRACCIÓN AUTOMÁTICA DEL BRANDBOOK", esos colores HEX son los colores REALES del brandbook — úsalos directamente en primary, secondary, accent. No los ignores.
-- primary: el color corporativo principal (el más prominente/frecuente en el brandbook).
-- secondary: el segundo color más corporativo. Si el brandbook tiene varios secundarios, elige el más diferenciado del primario.
-- accent: color de acento o de líneas especializadas (sub-marcas, categorías) si existe. null si no hay.
+- Si recibes "EXTRACCIÓN AUTOMÁTICA DEL BRANDBOOK", esos colores HEX son los colores REALES del brandbook — úsalos DIRECTAMENTE en primary, secondary, accent. NO los ignores ni los sustituyas por tu propia estimación.
+- "COLORES HEX DEL BRANDBOOK" lista colores por frecuencia: el primero es casi siempre primary, el segundo secondary, el tercero puede ser accent.
+- "COLORES DETECTADOS EN GRÁFICOS" son colores usados en bloques visuales del PDF — también son colores de marca reales.
+- primary: el color corporativo principal (el más prominente/frecuente en la lista extraída del brandbook).
+- secondary: el segundo color de marca más diferenciado del primario. Busca en toda la lista, no solo los primeros dos.
+- accent: color de acento o de sub-marcas si existe. Puede estar en los colores gráficos aunque no en el texto.
+- colors_extended: lista de todos los colores de marca detectados (máx. 6 HEX), para que el diseñador tenga la paleta completa.
 - primary_tint: mezcla primario con blanco (35%). Calcula el HEX.
 - primary_shade: mezcla primario con negro (30%). Calcula el HEX.
 - Si no hay brandbook ni web, deduce todo del logo.
@@ -120,6 +124,8 @@ DIFERENCIACIÓN OBLIGATORIA entre los 6 conceptos:
 CAMPO dalle_prompt — SOLO EL FONDO ARTÍSTICO:
   - En INGLÉS, retrato vertical (portrait)
   - Describe ÚNICAMENTE el fondo: texturas, geometría, gradientes, iluminación, atmósfera
+  - USA los colores REALES de la marca (primary, secondary de brand_analysis.colors) en los prompts
+    Ejemplo: si primary=#005B99, escribe "#005B99 deep blue" en el prompt de DALLE.
   - NO incluyas texto, tipografía, letras ni palabras
   - NO menciones logos, personas ni caras
   - Termina SIEMPRE con: "No text, no logos, no people. Premium award background."
@@ -133,29 +139,6 @@ CAMPO dalle_prompt — SOLO EL FONDO ARTÍSTICO:
     "Clean white #FFFFFF with bold horizontal band in brand color #2E7D32 at center.
      Editorial minimalist composition, soft shadows on the band edges.
      No text, no logos, no people. Premium award background."
-
-CAMPO text_prompt — SOLO LA TIPOGRAFÍA DEL GALARDÓN:
-  - En INGLÉS, describe ÚNICAMENTE el tratamiento tipográfico
-  - Incluye los textos LITERALES del galardón con jerarquía visual explícita:
-      → recipient (nombre del premiado): HERO SIZE, el elemento más grande
-      → headline (nombre del premio): tamaño medio
-      → subtitle (organización): pequeño, discreto
-  - Especifica: peso tipográfico, familia (serif/sans-serif/display), tratamiento visual
-    (embossed, glowing, metallic, engraved, editorial, reversed, outlined, etc.)
-  - Especifica colores HEX exactos para cada nivel
-  - NO menciones el fondo ni colores de fondo
-  - Orientación vertical, texto centrado
-
-  Ejemplos de text_prompt bien escritos:
-    "Ultra-bold condensed sans-serif award typography. Recipient 'OFESAUTO' at massive hero
-     scale, white #FFFFFF with subtle gold outer glow. Award title 'Empresa Comprometida
-     con la Seguridad' at medium size, gold #FFD700. Organization 'Juaneda Hospitales'
-     at small caption size, light gray #AAAAAA. Dramatic size contrast between levels."
-
-    "Elegant serif editorial layout. Recipient 'EMPRESA EJEMPLO' at large italic hero scale,
-     deep navy #1A237E bold. Award title 'Premio Sostenibilidad' at medium regular weight,
-     dark gray #555555. Organization 'Nombre del Cliente' at small light caption, gray #888888.
-     Refined institutional feel, generous spacing."
 
 REGLA CRÍTICA — subtitle (organización):
   El subtitle SIEMPRE es el nombre del cliente/empresa premiada (brand_name del análisis).
@@ -171,24 +154,55 @@ REGLA CRÍTICA — contraste de texto:
     o negro/blanco según la luminancia del fondo.
   El contraste mínimo aceptable es 4.5:1 (WCAG AA). Textos ilegibles arruinan el diseño.
 
-CAMPO text_bg_dark — fondo para generación del texto:
-  - true  → el texto es CLARO (blanco, dorado, plateado) → fondo negro para generación
-  - false → el texto es OSCURO (azul, negro, gris oscuro) → fondo blanco para generación
-  Regla: si el recipient en text_prompt es de color claro → true. Si es oscuro → false.
+DIRECCIÓN TIPOGRÁFICA — eres el tipógrafo del proyecto:
+  El sistema renderiza el texto con la fuente de marca exacta. Tú decides cómo se ve
+  cada elemento en cada propuesta. Varía radicalmente entre las 6 propuestas.
 
-CAMPO text_style.font_family — fuente de marca para el renderizado:
-  - Copia aquí el valor de typography.google_fonts_name del análisis de marca.
-  - Si es null en el análisis, escribe null aquí. No inventes ni supongas fuentes.
-  - Esta fuente se descarga de Google Fonts y se usa para el renderizado PIL (fallback).
-  - También menciónala en text_prompt: añade "rendered in [FontName] typeface" al estilo.
-  - Es IGUAL en los 6 conceptos — es la fuente corporativa, no varía por propuesta.
+  FUENTE (font_family):
+    - Usa el valor de typography.google_fonts_name del análisis. Si es null, escribe null.
+    - Es la misma en los 6 conceptos (es la fuente corporativa de la marca).
 
-CAMPO text_style.text_anchor — posición vertical del bloque de texto en el canvas:
-  OBLIGATORIO variar entre las 6 propuestas. Distribución sugerida:
-  - Propuestas 1, 4: "top"    (texto en la parte alta, logo abajo o pequeño arriba)
-  - Propuestas 2, 5: "center" (texto centrado verticalmente)
-  - Propuestas 3, 6: "bottom" (texto en la parte baja, logo arriba)
-  Esto garantiza que cada diseño tenga una composición diferente.
+  TAMAÑOS — crea contraste expresivo (recipient debe ser 3–5× mayor que subtitle):
+    recipient_size_ratio : 0.08–0.22  (nombre del premiado — varía dramáticamente)
+    headline_size_ratio  : 0.035–0.08 (título del premio)
+    subtitle_size_ratio  : 0.025–0.05 (organización — siempre el más pequeño)
+    Ejemplos de contraste fuerte: rec=0.20/hl=0.045/sub=0.030 (billboard ultra)
+                                  rec=0.14/hl=0.070/sub=0.042 (editorial equilibrado)
+                                  rec=0.10/hl=0.055/sub=0.032 (compacto elegante)
+
+  ALINEACIONES — independientes por elemento, créalas para reforzar el layout:
+    recipient_alignment / headline_alignment / subtitle_alignment : "left"|"center"|"right"
+    Combinaciones con personalidad:
+    - Todo centrado → formal, institucional (Danone, AWS)
+    - hl=right / rec=left / sub=right → diagonal, moderno (PepsiCo BAM)
+    - Todo left → editorial, minimalista (Enter Award)
+    - hl=left / rec=center / sub=left → híbrido premium
+    - hl=center / rec=center / sub=right → jerárquico asimétrico
+
+  COLORES (HEX exactos — SIEMPRE verificar contraste con bg_tone):
+    REGLA PRINCIPAL: usa los colores REALES de la marca de brand_analysis.colors (primary, secondary, accent, colors_extended).
+    colors_extended es la paleta completa — úsala para variedad entre propuestas.
+    Al menos 3 de los 6 conceptos deben tener recipient_color o headline_color = primary o secondary de marca.
+    recipient_color: primary/secondary de marca con contraste suficiente; si primary es oscuro y fondo es oscuro → usa #FFFFFF o tint claro
+    headline_color : secondary, accent o un color de colors_extended que contraste y diferencie del recipient
+    subtitle_color : versión discreta — primary_tint, neutral de marca, o gris
+    Fondo OSCURO: recipient en text_on_dark (de brand_analysis) o color primario claro + headline en secondary o accent
+    Fondo CLARO: recipient en primary o text_on_light + headline en secondary o primary_shade
+    Fondo MEDIO: recipient en primary si contrasta 4.5:1+, sino el de mayor contraste de colors_extended
+
+  MAYÚSCULAS:
+    recipient_uppercase: true  → impacto, modernidad (marcas geométricas, deportivas, tech)
+    recipient_uppercase: false → elegancia, cercanía (marcas naturales, sanitarias, culturales)
+
+  ESPACIADO:
+    spacing_scale: 0.5 (bloque denso, impactante) | 1.0 (estándar) | 1.8 (aireado, lujoso)
+
+CAMPO text_style.text_anchor — posición del bloque stacked en el canvas:
+  (En layouts spread/staggered/billboard/vertical el sistema lo ignora — posiciona automáticamente)
+  - "top"    → texto en la parte alta
+  - "center" → centrado verticalmente
+  - "bottom" → texto en la parte baja
+  Distribución: P1=top, P2=center, P3=bottom, P4=bottom, P5=center, P6=top
 
 CAMPO text_style.layout — distribución espacial del texto en el canvas:
   Tienes 5 opciones. OBLIGATORIO variar entre los 6 conceptos:
@@ -219,12 +233,25 @@ Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
     "pattern_name": "nombre evocador 2-3 palabras",
     "design_rationale": "por qué este concepto encaja con la marca (1 frase)",
     "dalle_prompt": "English — ONLY artistic background, NO text, NO logos...",
-    "text_prompt": "English — typography style + literal award texts + colors + hierarchy...",
-    "text_bg_dark": true,
     "bg_tone": "dark|light|mid",
     "color_overlay": { "active": false, "color": "#HEX de marca", "opacity": 0.10 },
     "logo": { "treatment": "blanco|negro|color|watermark|banda", "position": "top_center|top_left|top_right|center|bottom_center", "scale": 0.55, "opacity": 0.15, "band_color": "#HEX o null" },
-    "text_style": { "text_anchor": "top|center|bottom", "layout": "stacked|spread|staggered|billboard", "font_family": "Google Fonts name o null" },
+    "text_style": {
+      "text_anchor": "top|center|bottom",
+      "layout": "stacked|spread|staggered|billboard|vertical",
+      "font_family": "nombre exacto fuente de marca o null",
+      "recipient_color": "#HEX",
+      "headline_color": "#HEX",
+      "subtitle_color": "#HEX",
+      "recipient_size_ratio": 0.16,
+      "headline_size_ratio": 0.065,
+      "subtitle_size_ratio": 0.040,
+      "recipient_alignment": "left|center|right",
+      "headline_alignment": "left|center|right",
+      "subtitle_alignment": "left|center|right",
+      "recipient_uppercase": false,
+      "spacing_scale": 1.0
+    },
     "award_text": { "headline": "nombre del premio", "recipient": "nombre del premiado", "subtitle": "nombre del cliente (brand_name) — NUNCA el nombre del organizador del evento" }
   },
   { "proposal_id": 2, ... },
@@ -490,14 +517,14 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
     font_name = typo.get("google_fonts_name") or typo.get("font_name") or "sin datos"
     content.append({"type": "text", "text": (
         f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
-        f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text y text_prompt):\n"
+        f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text):\n"
         f"- Nombre del premiado : {recipient_txt}\n"
         f"- Nombre del premio   : {headline_txt}\n"
         f"- Organización        : {subtitle_txt}\n"
         f"{fecha_line}\n"
         f"- Evento              : {evento.get('nombre', '')}\n\n"
         f"FUENTE DE MARCA (para text_style.font_family): {font_name}\n\n"
-        "Genera los 6 conceptos. Incluye estos textos literalmente en award_text y text_prompt."
+        "Genera los 6 conceptos. Incluye estos textos literalmente en award_text."
     )})
 
     resultado = _llamar_claude(
@@ -514,24 +541,43 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
 def _validar_concepto(c: dict, idx: int) -> dict:
     # text_anchor rota entre top/center/bottom para garantizar variedad entre propuestas
     _anchors = ["top", "center", "bottom", "top", "center", "bottom"]
+    _layouts  = ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"]
+    _rec_cols = ["#FFFFFF", "#FFD700", "#FFFFFF", "#FFD700", "#FFFFFF", "#E0E0E0"]
+    _hl_cols  = ["#FFD700", "#FFFFFF", "#FFFFFF", "#E0E0E0", "#FFD700", "#FFFFFF"]
+    _sub_cols = ["#BBBBBB", "#AAAAAA", "#CCCCCC", "#999999", "#AAAAAA", "#BBBBBB"]
+    _hl_alns  = ["center",  "left",   "right",   "center",  "left",   "center"]
+    _rec_alns = ["center",  "center", "left",    "center",  "center", "center"]
+    _sub_alns = ["center",  "left",   "right",   "center",  "left",   "center"]
+    _rec_sz   = [0.16,      0.14,     0.18,      0.20,      0.15,     0.12]
+    _hl_sz    = [0.065,     0.070,    0.045,     0.038,     0.060,    0.055]
+    _sub_sz   = [0.040,     0.038,    0.030,     0.028,     0.035,    0.032]
+    _spacing  = [1.0,       1.6,      0.8,       0.6,       1.2,      1.0]
+    _upper    = [False,     False,    True,      True,      False,    False]
+    i6 = idx % 6
     defaults = {
         "proposal_id":      idx + 1,
         "pattern_name":     f"Concepto {idx + 1}",
         "design_rationale": "Diseño corporativo premium.",
         "dalle_prompt":     "Deep navy abstract corporate background, geometric shapes, premium. No text, no logos, no people. Premium award background.",
-        "text_prompt":      "Bold corporate sans-serif award typography. Recipient name at massive hero scale, white #FFFFFF. Award title at medium size, gold #FFD700. Organization at small caption size, light gray #BBBBBB. Dramatic size contrast between levels.",
-        "text_bg_dark":     True,
         "bg_tone":          "dark",
         "color_overlay":    {"active": False, "color": "#1A1A1A", "opacity": 0.15},
         "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
         "text_style":       {
-            "text_anchor":     _anchors[idx % 6],
-            "layout":          ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"][idx % 6],
-            "font_family":     None,
-            "margin_h":        0.07,
-            "recipient_color": "#FFFFFF",
-            "headline_color":  "#FFD700",
-            "subtitle_color":  "#BBBBBB",
+            "text_anchor":          _anchors[i6],
+            "layout":               _layouts[i6],
+            "font_family":          None,
+            "margin_h":             0.07,
+            "recipient_color":      _rec_cols[i6],
+            "headline_color":       _hl_cols[i6],
+            "subtitle_color":       _sub_cols[i6],
+            "recipient_size_ratio": _rec_sz[i6],
+            "headline_size_ratio":  _hl_sz[i6],
+            "subtitle_size_ratio":  _sub_sz[i6],
+            "recipient_alignment":  _rec_alns[i6],
+            "headline_alignment":   _hl_alns[i6],
+            "subtitle_alignment":   _sub_alns[i6],
+            "recipient_uppercase":  _upper[i6],
+            "spacing_scale":        _spacing[i6],
         },
         "award_text":       {"headline": "Excellence Award", "recipient": "Nombre Apellido", "subtitle": "Organización"},
     }

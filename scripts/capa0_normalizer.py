@@ -78,6 +78,39 @@ PDF_MAX_BYTES       = 4 * 1024 * 1024   # 4 MB — por encima se muestrea
 PDF_PAGINAS_VISUAL  = 16                 # máximo de páginas visuales a enviar a Claude
 
 
+def _colores_dominantes_imagen(img_pil: "Image.Image", n: int = 6) -> list[str]:
+    """
+    Extrae los N colores más saturados/dominantes de una imagen PIL.
+    Útil para capturar colores de marca que aparecen como bloques gráficos en el brandbook
+    pero no como texto HEX (p.ej. franjas de color, logotipos, gráficos de paleta).
+
+    Usa muestreo de píxeles + cuantización a paleta reducida para eficiencia.
+    Filtra blancos, negros y grises sin saturación.
+    """
+    from collections import Counter
+    img_small = img_pil.resize((80, 80))
+    pixels = list(img_small.getdata())
+
+    def cuantizar(r, g, b):
+        return ((r // 32) * 32, (g // 32) * 32, (b // 32) * 32)
+
+    conteo = Counter(cuantizar(*p[:3]) for p in pixels)
+    resultado = []
+    for (r, g, b), _ in conteo.most_common(100):
+        lum = (r * 299 + g * 587 + b * 114) // 1000
+        sat = max(r, g, b) - min(r, g, b)
+        if lum < 20 or lum > 235:   # muy oscuro o muy claro
+            continue
+        if sat < 30:                 # gris sin saturación
+            continue
+        h = f"#{r:02X}{g:02X}{b:02X}"
+        if h not in resultado:
+            resultado.append(h)
+        if len(resultado) >= n:
+            break
+    return resultado
+
+
 def _indices_por_relevancia(total: int, n: int,
                              colores_hex: dict, colores_pant: dict) -> list[int]:
     """
@@ -138,6 +171,12 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
     import fitz
 
     hex_re  = re.compile(r'#([0-9A-Fa-f]{6})\b')
+    # RGB valores escritos como "R: 41 G: 128 B: 185" o "41 / 128 / 185" o "41, 128, 185" o "rgb(41,128,185)"
+    rgb_re  = re.compile(
+        r'(?:R(?:ed)?\s*[:\s]\s*(\d{1,3})\s*[,/\s]\s*G(?:reen)?\s*[:\s]\s*(\d{1,3})\s*[,/\s]\s*B(?:lue)?\s*[:\s]\s*(\d{1,3})'
+        r'|rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\))',
+        re.IGNORECASE,
+    )
     pant_re = re.compile(r'PANTONE\s+[\w\d]+', re.IGNORECASE)
     font_re = re.compile(
         r'(?:font(?:\s+family)?|typeface|tipograf[íi]a|fuente)\s*[:\-]?\s*'
@@ -150,6 +189,7 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
     fuentes          = set()
     imagenes_b64     = []   # lista de JPEG base64, una por página seleccionada
     fuentes_extraidas = {}  # nombre_limpio → Path
+    colores_graficos  = set()  # colores extraídos de píxeles de páginas renderizadas
 
     try:
         doc   = fitz.open(stream=bytearray(data), filetype="pdf")
@@ -162,6 +202,17 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
                 h = "#" + m.group(1).upper()
                 if h not in ("#FFFFFF", "#000000"):
                     colores_hex.setdefault(h, []).append(i + 1)
+            for m in rgb_re.finditer(texto):
+                # grupo 1-3 → "R: G: B:" format; grupo 4-6 → "rgb()" format
+                if m.group(1):
+                    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                else:
+                    r, g, b = int(m.group(4)), int(m.group(5)), int(m.group(6))
+                if all(0 <= v <= 255 for v in (r, g, b)):
+                    lum = (r * 299 + g * 587 + b * 114) // 1000
+                    if 5 < lum < 250:   # excluir blanco puro y negro puro
+                        h = f"#{r:02X}{g:02X}{b:02X}"
+                        colores_hex.setdefault(h, []).append(i + 1)
             for m in pant_re.finditer(texto):
                 colores_pant.setdefault(m.group(0).upper().strip(), []).append(i + 1)
             for m in font_re.finditer(texto):
@@ -206,12 +257,18 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
         indices  = _indices_por_relevancia(total, PDF_PAGINAS_VISUAL,
                                            colores_hex, colores_pant)
         kb_total = 0
+        colores_graficos = set()   # colores extraídos de los píxeles de las páginas
 
         for i in indices:
             pag = doc[i]
             mat = fitz.Matrix(1.5, 1.5)      # ~108 dpi — suficiente para análisis
             pix = pag.get_pixmap(matrix=mat)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
+            # Extraer colores dominantes de la página renderizada
+            for c in _colores_dominantes_imagen(img, n=6):
+                colores_graficos.add(c)
+
             buf = BytesIO()
             img.save(buf, format="JPEG", quality=75)
             b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
@@ -221,6 +278,7 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
         doc.close()
         print(f"    [BrandBook] Páginas seleccionadas por relevancia: {indices}")
         print(f"    [BrandBook] Total enviado a Claude: {len(indices)} páginas ({kb_total} KB)")
+        print(f"    [BrandBook] Colores gráficos (píxeles): {list(colores_graficos)[:10]}")
 
     except Exception as e:
         print(f"    [BrandBook] Error procesando PDF ({e})")
@@ -233,6 +291,12 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
         lineas.append("COLORES HEX DEL BRANDBOOK (ordenados por frecuencia = importancia):")
         for h, pags in top:
             lineas.append(f"  {h} — aparece en páginas: {pags[:5]}")
+
+    if colores_graficos:
+        lineas.append("COLORES DETECTADOS EN GRÁFICOS/BLOQUES DE LAS PÁGINAS (muestreo visual):")
+        lineas.append("  Estos colores son los más usados en las ilustraciones y bloques de color del brandbook.")
+        for c in sorted(colores_graficos)[:20]:
+            lineas.append(f"  {c}")
 
     if colores_pant:
         lineas.append("REFERENCIAS PANTONE:")
