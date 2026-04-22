@@ -12,6 +12,11 @@ Pipeline por propuesta:
   4. Texto del galardón con contraste garantizado
 """
 
+import base64
+import os
+import tempfile
+from io import BytesIO
+
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -172,16 +177,20 @@ def _cargar_fuente(size: int, style: str = "bold") -> ImageFont.ImageFont:
 
 
 def _cargar_fuente_marca(size: int, font_family: str | None,
-                          weight: int = 700, style_fallback: str = "bold") -> ImageFont.ImageFont:
+                          weight: int = 700, style_fallback: str = "bold",
+                          style_category: str = "") -> ImageFont.ImageFont:
     """
-    Carga la fuente de marca desde caché local o Google Fonts.
-    Si font_family es None o la descarga falla → fallback a _cargar_fuente(size, style_fallback).
+    Carga la fuente de marca con fallback inteligente por categoría visual.
+    Orden de prioridad:
+      1. font_family exacta (local o Google Fonts)
+      2. Alternativas del mismo style_category (FONT_CATALOG)
+      3. Fuente del sistema (_cargar_fuente)
     Nunca lanza excepción.
     """
     if font_family:
         try:
-            from scripts.font_manager import get_font_path
-            path = get_font_path(font_family, weight)
+            from scripts.font_manager import get_font_path_with_fallback
+            path = get_font_path_with_fallback(font_family, style_category or None, weight)
             if path and path.exists():
                 print(f"  [renderer] Fuente: {path.name} (size={size})")
                 return ImageFont.truetype(str(path), size)
@@ -265,7 +274,9 @@ def _dibujar_bloque(draw, texto, y, font, color, x_start, text_width, alineacion
         tw = _tw(draw, linea, font)
         if alineacion == "center":
             x = x_start + max(0, (text_width - tw) // 2)
-        else:
+        elif alineacion == "right":
+            x = x_start + max(0, text_width - tw)
+        else:  # left
             x = x_start
         draw.text((x, y + i * h_linea), linea, fill=color, font=font)
     return y + len(lineas) * h_linea
@@ -456,15 +467,16 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     tc   = concepto.get("text") or concepto.get("text_style", {})
 
     # ── Configuración base ────────────────────────────────────────────
-    color_hex     = tc.get("color", "#FFFFFF")
-    alineacion    = tc.get("alignment", "center")
-    font_style    = tc.get("font_style", "bold")
-    font_family   = tc.get("font_family")  # Google Fonts name o None
-    margin_h      = int(w * float(tc.get("margin_h", 0.07)))
-    layout        = tc.get("layout", "stacked")
-    sep_lines     = tc.get("separator_lines", False)
-    spacing_scale = max(0.2, float(tc.get("spacing_scale", 1.0)))
-    text_anchor   = tc.get("text_anchor", "center")
+    color_hex      = tc.get("color", "#FFFFFF")
+    alineacion     = tc.get("alignment", "center")
+    font_style     = tc.get("font_style", "bold")
+    font_family    = tc.get("font_family")  # Google Fonts name o None
+    font_style_cat = tc.get("font_style_category", "")  # categoría visual para fallback
+    margin_h       = int(w * float(tc.get("margin_h", 0.07)))
+    layout         = tc.get("layout", "stacked")
+    sep_lines      = tc.get("separator_lines", False)
+    spacing_scale  = max(0.2, float(tc.get("spacing_scale", 1.0)))
+    text_anchor    = tc.get("text_anchor", "center")
 
     # ── Colores y alineaciones por elemento ──────────────────────────
     hl_color  = tc.get("headline_color")  or color_hex
@@ -478,12 +490,29 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     x_start    = margin_h
     text_width = max(60, w - 2 * margin_h)
 
+    # ── Zona horizontal por concepto (P1=izquierda, P5=derecha) ─────
+    _pid_zone = concepto.get("proposal_id", 1)
+    _i6_zone  = (_pid_zone - 1) % 6
+    if _i6_zone == 0:        # P1 — zona izquierda (74% del ancho)
+        text_width = max(60, int(w * 0.74) - margin_h)
+        # alineación forzada izquierda
+        if hl_align  == "center": hl_align  = "left"
+        if rec_align == "center": rec_align = "left"
+        if sub_align == "center": sub_align = "left"
+    elif _i6_zone == 4:      # P5 — zona derecha (empieza en 32%)
+        x_start    = max(margin_h, int(w * 0.32))
+        text_width = max(60, w - x_start - margin_h)
+        if hl_align  == "center": hl_align  = "right"
+        if rec_align == "center": rec_align = "right"
+        if sub_align == "center": sub_align = "right"
+
     # ── Geometría vertical ───────────────────────────────────────────
     # Layouts de canvas completo: elementos distribuidos por toda la altura
     # (headline arriba, recipient al centro, subtitle abajo — sin zona fija bajo el logo)
     _FULL_CANVAS = {"spread", "staggered", "billboard", "vertical"}
     if layout in _FULL_CANVAS:
-        y_start = int(h * 0.04)
+        # y_start respeta logo_bottom — headline nunca entra en la zona del logo
+        y_start = max(int(h * 0.04), logo_bottom + int(h * 0.018))
         y_end   = int(h * 0.96)
         sep_y   = None
     elif layout == "logo_bottom":
@@ -499,12 +528,43 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     zone_h   = max(1, y_end - y_start)
     bg_tone  = concepto.get("bg_tone", "dark")
 
+    # Acento de marca para el PIL renderer (misma lógica que _build_html)
+    _pil_ov_col = ((concepto.get("color_overlay") or {}).get("color") or "").strip()
+    _pil_accent = _pil_ov_col if _is_vivid(_pil_ov_col) else (
+                      hl_color if _is_vivid(hl_color) else (
+                          rec_color if _is_vivid(rec_color) else hl_color))
+    _pil_acc_rgb = hex_to_rgb(_pil_accent)
+    # Color estructural: secundario si vívido, si no acento principal
+    _pil_sec = (concepto.get("_secondary") or "").strip()
+    _pil_struct = _pil_sec if _is_vivid(_pil_sec) else _pil_accent
+    _pil_struct_rgb = hex_to_rgb(_pil_struct)
+    # En fondos oscuros: aclarar el color estructural para que las barras/bandas
+    # sean claramente visibles incluso en paletas monocromáticas (ej: azul-sobre-azul).
+    if bg_tone == "dark":
+        _sr, _sg, _sb = _pil_struct_rgb
+        _pil_struct_rgb = (
+            min(255, int(_sr + (255 - _sr) * 0.42)),
+            min(255, int(_sg + (255 - _sg) * 0.42)),
+            min(255, int(_sb + (255 - _sb) * 0.42)),
+        )
+
     # En fondos claros forzamos colores oscuros de partida para evitar texto invisible
     if bg_tone == "light":
         color_hex = color_hex if _ratio_contraste(color_hex, "#F5F5F5") >= 3.0 else "#1A1A1A"
         hl_color  = hl_color  if _ratio_contraste(hl_color,  "#F5F5F5") >= 3.0 else "#1A1A1A"
-        rec_color = rec_color if _ratio_contraste(rec_color, "#F5F5F5") >= 4.5 else "#0A0A0A"
+        # P2/P5: permitir color secundario/acento para recipient si contraste suficiente
+        _pid_pil  = concepto.get("proposal_id", 1)
+        _i6_pil   = (_pid_pil - 1) % 6
+        _p_color  = _pil_struct if _is_vivid(_pil_struct) and _ratio_contraste(_pil_struct, "#F5F5F5") >= 2.8 else (
+                    _pil_accent if _is_vivid(_pil_accent) and _ratio_contraste(_pil_accent, "#F5F5F5") >= 2.8 else "")
+        if _i6_pil in (1, 4) and _p_color:
+            rec_color = _p_color
+        elif _ratio_contraste(rec_color, "#F5F5F5") < 4.5:
+            rec_color = "#0A0A0A"
         sub_color = sub_color if _ratio_contraste(sub_color, "#F5F5F5") >= 3.0 else "#444444"
+    else:
+        _pid_pil = concepto.get("proposal_id", 1)
+        _i6_pil  = (_pid_pil - 1) % 6
 
     color_hex = _color_sobre_region(img, color_hex, x_start, y_start, text_width, zone_h)
     hl_color  = _color_sobre_region(img, hl_color,  x_start, y_start, text_width, zone_h // 3)
@@ -526,9 +586,11 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         recipient = recipient.upper()
 
     # ── Tamaños de fuente ────────────────────────────────────────────
-    sz_hl  = max(8, int(h * float(tc.get("headline_size_ratio",  0.065))))
-    sz_rec = max(8, int(h * float(tc.get("recipient_size_ratio", 0.16))))
-    sz_sub = max(7, int(h * float(tc.get("subtitle_size_ratio",  0.040))))
+    # Canvas estrecho (247×793): text_width ≈ 209px. Ratios basados en h producen
+    # fuentes de 150px+ que nunca caben. Cap inicial agresivo por text_width.
+    sz_hl  = max(8, min(int(h * float(tc.get("headline_size_ratio",  0.065))), int(text_width * 0.35)))
+    sz_rec = max(8, min(int(h * float(tc.get("recipient_size_ratio", 0.16))),  int(text_width * 0.45)))
+    sz_sub = max(7, min(int(h * float(tc.get("subtitle_size_ratio",  0.040))), int(text_width * 0.25)))
 
     n_seps     = (1 if sep_lines and headline else 0) + (1 if sep_lines and recipient else 0)
     max_text_h = max(20, zone_h - n_seps * int(h * 0.025))
@@ -544,34 +606,107 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
                 + _h_bloque(subtitle, sz_sub) + _h_bloque(fecha, sz_sub)
                 + esp_base * max(0, n_blocks - 1))
 
-    # Escalar si no caben
+    # Escalar por altura si no caben verticalmente
     if total_h > max_text_h and total_h > 0:
         factor = max_text_h / total_h
         sz_hl  = max(8, int(sz_hl  * factor))
         sz_rec = max(8, int(sz_rec * factor))
         sz_sub = max(7, int(sz_sub * factor))
-        # Recalcular total con nuevos tamaños
         esp_base = max(4, int(sz_rec * 0.45 * spacing_scale))
         total_h  = (_h_bloque(headline, sz_hl) + _h_bloque(recipient, sz_rec)
                     + _h_bloque(subtitle, sz_sub) + _h_bloque(fecha, sz_sub)
                     + esp_base * max(0, n_blocks - 1))
 
-    font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style)
-    font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style)
-    font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style)
+    # Cargar fuentes reales y ajustar por anchura con ellas (no con fuente del sistema)
+    # La fuente de marca puede ser más ancha que el fallback — medir con la fuente exacta.
+    font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+    font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+    font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style, style_category=font_style_cat)
+
+    def _max_palabra(texto, font):
+        if not texto:
+            return 0
+        return max((_tw(draw, p, font) for p in texto.split()), default=0)
+
+    # Reducir con paso geométrico (12% por iteración) — converge en ~25 pasos
+    # desde cualquier tamaño inicial hasta el que quepa en text_width.
+    limite = int(text_width * 0.97)
+    for _ in range(30):
+        changed = False
+        if _max_palabra(headline,  font_hl)  > limite:
+            sz_hl  = max(8, int(sz_hl  * 0.88))
+            font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+            changed = True
+        if _max_palabra(recipient, font_rec) > limite:
+            sz_rec = max(8, int(sz_rec * 0.88))
+            font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+            changed = True
+        if _max_palabra(subtitle,  font_sub) > limite:
+            sz_sub = max(7, int(sz_sub * 0.88))
+            font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style, style_category=font_style_cat)
+            changed = True
+        if not changed:
+            break
+
+    # ── Decoraciones por concepto (PIL) — capa de fondo antes del texto ──
+    # Equivalente a las decoraciones CSS del HTML renderer.
+    if _i6_pil == 0:
+        # P1: Círculo watermark esquina inferior derecha en color estructural de marca
+        cs  = int(min(w, h) * 0.72)
+        cx  = int(w * 0.80)
+        cy  = int(h * 0.74)
+        draw.ellipse([cx - cs//2, cy - cs//2, cx + cs//2, cy + cs//2],
+                     outline=(*_pil_struct_rgb, 41), width=2)
+        # P1: headline en color estructural de marca
+        if _is_vivid(_pil_struct):
+            hl_color = _pil_struct
+
+    elif _i6_pil == 2:
+        # P3: Barra vertical gruesa + barra horizontal cruzada en color secundario
+        bar_w   = max(14, int(w * 0.040))
+        bar_x   = max(2, margin_h - bar_w - 6)
+        bar_top_d = int(h * 0.06)
+        bar_h_d   = int(h * 0.88)
+        draw.rectangle([bar_x, bar_top_d, bar_x + bar_w, bar_top_d + bar_h_d],
+                       fill=(*_pil_struct_rgb, 242))
+        cross_y_d = int(h * 0.47)
+        cross_w_d = int(w * 0.28)
+        draw.rectangle([bar_x + bar_w + 2, cross_y_d,
+                        bar_x + bar_w + 2 + cross_w_d, cross_y_d + 2],
+                       fill=(*_pil_struct_rgb, 115))
+
+    elif _i6_pil == 5:
+        # P6: Círculo watermark centrado en blanco
+        cs  = int(min(w, h) * 0.70)
+        cx  = w // 2
+        cy  = int(h * 0.52)
+        draw.ellipse([cx - cs//2, cy - cs//2, cx + cs//2, cy + cs//2],
+                     outline=(255, 255, 255, 31), width=3)
 
     # ── Layouts de canvas completo ───────────────────────────────────
 
     if layout == "spread":
-        # Headline: muy arriba · Recipient: centro exacto del canvas · Subtitle: muy abajo
-        # Cada elemento usa la alineación que Claude especificó — crea tensión tipográfica
-        mg    = int(h * 0.04)
+        # Headline: bajo el logo · Recipient: centro exacto del canvas · Subtitle: muy abajo
+        # y_start ya incorpora logo_bottom — nunca entra en la zona del logo
         rec_h = _h_bloque(recipient, sz_rec)
 
-        y_hl  = mg
+        y_hl  = y_start                       # respeta logo_bottom
         y_rec = h // 2 - rec_h // 2          # centro absoluto del canvas
         y_sub = int(h * 0.85)
         y_fec = int(h * 0.91)
+
+        # P5: triple punto de acento entre headline y recipient
+        if _i6_pil == 4:
+            gap_av = max(0, y_rec - (y_hl + sz_hl + 6))
+            dot_y5 = y_hl + sz_hl + max(10, gap_av // 2 - 4)
+            dot_y5 = min(dot_y5, y_rec - 20)
+            dot_c  = _pil_struct_rgb if _is_vivid(_pil_struct) else (_pil_acc_rgb if _is_vivid(_pil_accent) else hex_to_rgb(rec_color))
+            for di, (dx_off, ds) in enumerate([(-14, 5), (0, 7), (14, 5)]):
+                cx_d = w // 2 + dx_off
+                alpha = 153 if ds == 5 else 230
+                draw.ellipse([cx_d - ds//2, dot_y5 - ds//2,
+                              cx_d + ds//2, dot_y5 + ds//2],
+                             fill=(*dot_c, alpha))
 
         if headline:
             _dibujar_bloque(draw, headline, y_hl, font_hl,
@@ -598,13 +733,12 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         return img
 
     if layout == "staggered":
-        # Headline: arriba alineado derecha · Recipient: ENORME izquierda, centro
-        # Subtitle: abajo alineado derecha — composición diagonal / asimétrica extrema
+        # Headline: arriba derecha (bajo logo) · Recipient: ENORME izquierda, centro
+        # Subtitle: abajo derecha — composición diagonal / asimétrica extrema
         # Inspirado en: PepsiCo BAM — tensión visual por asimetría deliberada
-        mg    = int(h * 0.04)
         rec_h = _h_bloque(recipient, sz_rec)
 
-        y_hl  = mg
+        y_hl  = y_start                       # respeta logo_bottom
         y_rec = h // 2 - rec_h // 2          # centro absoluto del canvas
         y_sub = int(h * 0.87)
         y_fec = int(h * 0.92)
@@ -684,13 +818,21 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         sz_sub_b = max(5, int(h * 0.028))
         font_hl_b  = _cargar_fuente(sz_hl_b,  font_style)
         font_sub_b = _cargar_fuente(sz_sub_b, font_style)
-        mg = int(h * 0.04)
+        # Headline respeta logo_bottom — nunca entra en la zona del logo
+        mg_top = max(int(h * 0.04), logo_bottom + int(h * 0.018))
+        # P4: banda en color secundario (efecto Booking: color 2 sobre fondo primario)
+        if _i6_pil == 3 and bg_tone in ("dark", "mid"):
+            band_top_b = int(h * 0.20)
+            band_h_b   = int(h * 0.52)
+            _b4_rgb = _pil_struct_rgb if _is_vivid(_pil_struct) else _pil_acc_rgb
+            draw.rectangle([0, band_top_b, w, band_top_b + band_h_b],
+                           fill=(*_b4_rgb, 71))  # ~28% opacity
 
         hl_h_px  = _h_bloque(headline, sz_hl_b)  if headline else 0
         sub_h_px = _h_bloque(subtitle, sz_sub_b) if subtitle else 0
 
         # Zona del recipient: desde bajo el headline hasta sobre el subtitle
-        rec_top  = mg + hl_h_px + int(h * 0.02) if headline else mg
+        rec_top  = mg_top + hl_h_px + int(h * 0.02) if headline else mg_top
         rec_bot  = int(h * 0.87) if subtitle else int(h * 0.92)
         rec_zone = max(20, rec_bot - rec_top)
 
@@ -704,7 +846,7 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
             y_rec = rec_top
 
         if headline:
-            _dibujar_bloque(draw, headline, mg, font_hl_b,
+            _dibujar_bloque(draw, headline, mg_top, font_hl_b,
                             hex_to_rgba(hl_color, 180), x_start, text_width, "center")
         if recipient:
             _dibujar_bloque(draw, recipient, y_rec, font_rec_b,
@@ -739,6 +881,22 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
                             x_start, text_width, hl_align) + esp
         if sep_lines:
             y = _sep(y)
+        # P1: punto de acento tras el headline en color secundario/acento
+        elif _i6_pil == 0 and (_is_vivid(_pil_struct) or _is_vivid(_pil_accent)):
+            dot_r = 4
+            dot_cx = w // 2
+            draw.ellipse([dot_cx - dot_r, y - dot_r, dot_cx + dot_r, y + dot_r],
+                         fill=(*_pil_struct_rgb, 224))
+            y += dot_r * 2 + esp
+        # P6: regla gruesa tras el headline en color secundario si disponible
+        elif _i6_pil == 5:
+            rule_w6 = int(text_width * 0.78)
+            rule_x6 = x_start + (text_width - rule_w6) // 2
+            _r6_rgb = _pil_struct_rgb if _is_vivid(_pil_struct) else (255, 255, 255)
+            _r6_alpha = 217 if _is_vivid(_pil_struct) else 107
+            draw.rectangle([rule_x6, y, rule_x6 + rule_w6, y + 3],
+                           fill=(*_r6_rgb, _r6_alpha))
+            y += 3 + esp
 
     if recipient:
         esp  = max(4, int(font_rec.getbbox("A")[3] * 0.5 * spacing_scale))
@@ -854,11 +1012,651 @@ def _apply_overlay(img: Image.Image, overlay_cfg: dict, w: int, h: int) -> Image
         return img
     try:
         color   = hex_to_rgb(overlay_cfg.get("color", "#000000"))
-        opacity = int(float(overlay_cfg.get("opacity", 0.15)) * 255)
+        # Cap opacity: máx 0.28 — evita que una tinta de marca destruya el fondo DALLE
+        raw_op  = float(overlay_cfg.get("opacity", 0.15))
+        opacity = int(min(raw_op, 0.28) * 255)
         overlay = Image.new("RGBA", (w, h), (*color, opacity))
         return Image.alpha_composite(img, overlay)
     except Exception:
         return img
+
+
+# ─── HTML/CSS Renderer (Playwright) ──────────────────────────────────────────
+
+_pw_instance = None
+_pw_browser  = None
+
+
+def _get_browser():
+    """Singleton Chromium headless — se lanza una vez por proceso Flask."""
+    global _pw_instance, _pw_browser
+    # Comprobar cache ANTES de importar (permite uso desde threads Flask sin re-importar)
+    if _pw_browser is not None:
+        try:
+            if _pw_browser.is_connected():
+                return _pw_browser
+        except Exception:
+            pass
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        print(f"  [HTML] Playwright no instalado: {e}")
+        return None
+    try:
+        print("  [HTML] Lanzando Chromium...")
+        _pw_instance = sync_playwright().start()
+        _pw_browser  = _pw_instance.chromium.launch(headless=True)
+        print(f"  [HTML] Chromium listo: v{_pw_browser.version}")
+        return _pw_browser
+    except Exception as e:
+        import traceback
+        print(f"  [HTML] ERROR Playwright ({type(e).__name__}): {e}")
+        traceback.print_exc()
+        return None
+
+
+def _img_to_data_url(img: Image.Image, quality: int = 88) -> str:
+    """Convierte PIL Image a data URL JPEG para inyectar como fondo HTML."""
+    buf = BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=quality)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/jpeg;base64,{b64}"
+
+
+def _build_font_css(font_family: str | None, style_category: str = "") -> tuple[str, str]:
+    """
+    Devuelve (css_declaration, font_family_css).
+    Prioridad: fuente local (.ttf en assets/fonts/) → Google Fonts @import → system font.
+    Usa get_font_path_with_fallback para aplicar el catálogo tipográfico por categoría visual.
+    """
+    if not font_family:
+        return "", "'Segoe UI', Arial, sans-serif"
+
+    try:
+        from scripts.font_manager import get_font_path_with_fallback
+        path_700 = get_font_path_with_fallback(font_family, style_category or None, 700)
+        path_400 = get_font_path_with_fallback(font_family, style_category or None, 400)
+    except Exception:
+        path_700 = path_400 = None
+
+    # Determinar la familia real resuelta (puede diferir del nombre pedido si hubo fallback)
+    import re as _re
+    resolved_family = font_family
+    ref_path = path_700 or path_400
+    if ref_path:
+        # Extraer nombre limpio del filename: "Fredoka_One_700.ttf" → "Fredoka One"
+        stem = _re.sub(r"_\d{3}$", "", ref_path.stem)
+        resolved_family = stem.replace("_", " ")
+
+    family_safe = resolved_family.replace("'", "").replace('"', "")
+
+    if path_700 or path_400:
+        # @font-face con archivos locales ya descargados — sin red
+        blocks = []
+        if path_400:
+            url = str(path_400).replace("\\", "/")
+            blocks.append(
+                f"@font-face {{ font-family: '{family_safe}'; "
+                f"src: url('file:///{url}'); font-weight: 400; }}"
+            )
+        if path_700:
+            url = str(path_700).replace("\\", "/")
+            blocks.append(
+                f"@font-face {{ font-family: '{family_safe}'; "
+                f"src: url('file:///{url}'); font-weight: 700; }}"
+            )
+        return "\n".join(blocks), f"'{family_safe}', sans-serif"
+    else:
+        # Google Fonts @import — requiere red; Playwright la carga via temp file
+        family_url = font_family.replace(" ", "+")
+        css = (f"@import url('https://fonts.googleapis.com/css2?"
+               f"family={family_url}:wght@400;700&display=swap');")
+        return css, f"'{font_family.replace(chr(39), '').replace(chr(34), '')}', sans-serif"
+
+
+def _is_vivid(hex_color: str) -> bool:
+    """True si el color tiene saturación significativa (no es gris/blanco/negro)."""
+    try:
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+        mx, mn = max(r, g, b), min(r, g, b)
+        return (mx - mn) / mx > 0.28 if mx > 0.08 else False
+    except Exception:
+        return False
+
+
+def _build_html(concepto: dict, award: dict, bg_data_url: str,
+                w: int, h: int, logo_bottom: int,
+                hl_px: int = 0, rec_px: int = 0, sub_px: int = 0) -> str:
+    """Construye el HTML completo con tratamiento tipográfico de diseñador por concepto.
+    Cada uno de los 6 conceptos tiene su propio lenguaje visual: pesos, tracking,
+    sombras, elementos decorativos (líneas, barras, puntos, bandas).
+    Los tamaños en px vienen pre-calculados por PIL (métricas exactas de fuente).
+    """
+    tc = concepto.get("text_style", {})
+
+    layout           = tc.get("layout", "stacked")
+    anchor           = tc.get("text_anchor", "center")
+    font_family      = tc.get("font_family")
+    font_style_cat   = tc.get("font_style_category", "")
+    spacing_scale    = max(0.3, float(tc.get("spacing_scale", 1.0)))
+    bg_tone          = concepto.get("bg_tone", "dark")
+    secondary_color  = concepto.get("_secondary", "") or ""
+    accent_color     = concepto.get("_accent", "")    or ""
+
+    margin_px = max(16, int(w * 0.08))
+
+    # ── Zonas de composición horizontal por concepto ─────────────────
+    # P1: texto en zona IZQUIERDA (60% del ancho) — deja espacio derecho para decoración
+    # P5: texto en zona DERECHA (60% del ancho) — composición editorial asimétrica
+    # Resto: ancho completo (margen simétrico estándar)
+    pid_zone = concepto.get("proposal_id", 1)
+    i6_zone  = (pid_zone - 1) % 6
+    if i6_zone == 0:        # P1 — zona izquierda (deja 26% derecho libre)
+        zone_l = margin_px
+        zone_r = int(w * 0.26)
+    elif i6_zone == 4:      # P5 — zona derecha
+        zone_l = int(w * 0.32)
+        zone_r = margin_px
+    else:                   # resto — ancho completo
+        zone_l = margin_px
+        zone_r = margin_px
+
+    # ── Colores con corrección de contraste ──────────────────────────
+    hl_color  = tc.get("headline_color",  "#FFFFFF")
+    rec_color = tc.get("recipient_color", "#FFFFFF")
+    sub_color = tc.get("subtitle_color",  "#AAAAAA")
+
+    if bg_tone == "light":
+        if _ratio_contraste(hl_color,  "#F5F5F5") < 3.0: hl_color  = "#1A1A1A"
+        if _ratio_contraste(rec_color, "#F5F5F5") < 4.5: rec_color = "#0A0A0A"
+        if _ratio_contraste(sub_color, "#F5F5F5") < 2.5: sub_color = "#444444"
+    elif bg_tone == "dark":
+        if _ratio_contraste(hl_color,  "#0A0A0A") < 3.0: hl_color  = "#FFFFFF"
+        if _ratio_contraste(rec_color, "#0A0A0A") < 4.5: rec_color = "#FFFFFF"
+        if _ratio_contraste(sub_color, "#0A0A0A") < 2.5: sub_color = "#CCCCCC"
+
+    # ── Tamaños en px ────────────────────────────────────────────────
+    if not rec_px:
+        rec_px = max(14, min(int(h * float(tc.get("recipient_size_ratio", 0.18))),
+                             int((w - 2 * margin_px) * 0.42)))
+    if not hl_px:
+        hl_px  = max(10, min(int(h * float(tc.get("headline_size_ratio",  0.090))),
+                             int((w - 2 * margin_px) * 0.30)))
+    if not sub_px:
+        sub_px = max(8,  min(int(h * float(tc.get("subtitle_size_ratio",  0.040))),
+                             int((w - 2 * margin_px) * 0.20)))
+
+    gap = max(6, int(rec_px * 0.22 * spacing_scale))
+
+    # ── Alineaciones ─────────────────────────────────────────────────
+    hl_align  = tc.get("headline_alignment",  "center")
+    rec_align = tc.get("recipient_alignment", "center")
+    sub_align = tc.get("subtitle_alignment",  "center")
+
+    # ── Fuente ───────────────────────────────────────────────────────
+    font_css, font_family_css = _build_font_css(font_family, font_style_cat)
+
+    # ── Textos ───────────────────────────────────────────────────────
+    import html as _h
+    headline  = _h.escape(award.get("headline",  "") or "")
+    recipient = _h.escape(award.get("recipient", "") or "")
+    subtitle  = _h.escape(award.get("subtitle",  "") or "")
+    fecha     = _h.escape(str(award.get("fecha", "") or ""))
+
+    rec_upper = "uppercase" if tc.get("recipient_uppercase") else "none"
+
+    # ══════════════════════════════════════════════════════════════════
+    # TRATAMIENTO TIPOGRÁFICO POR CONCEPTO — lenguaje visual de diseñador
+    # Cada concepto es un sistema gráfico distinto: pesos, tracking, color de
+    # texto y elementos decorativos crean identidad visual diferenciada.
+    # ══════════════════════════════════════════════════════════════════
+    pid        = concepto.get("proposal_id", 1)
+    i6         = (pid - 1) % 6
+
+    # Acento de marca — color más saturado disponible en el concepto
+    _overlay_color = ((concepto.get("color_overlay") or {}).get("color") or "").strip()
+    accent_dec = _overlay_color if _is_vivid(_overlay_color) else (
+        hl_color if _is_vivid(hl_color) else (
+            rec_color if _is_vivid(rec_color) else hl_color
+        )
+    )
+    # Color secundario estructural — se usa en barras/bandas para contraste máximo
+    # Prioridad: secondary_color (si es vívido) > accent_dec
+    struct_color = secondary_color if _is_vivid(secondary_color) else accent_dec
+    # En fondos oscuros: aclarar el color estructural un 42% para visibilidad máxima
+    # en paletas monocromáticas (azul-sobre-azul, verde-sobre-verde, etc.)
+    if bg_tone == "dark":
+        struct_color = _tint(struct_color, 0.42)
+
+    # Valores por defecto
+    hl_weight           = "700"
+    hl_tracking         = "0.02em"
+    rec_tracking        = "-0.01em"
+    sub_tracking        = "0.15em"
+    hl_line_height      = "1.18"
+    rec_line_height     = "1.04"
+    hl_extra_css        = ""
+    rec_extra_css       = ""
+    sub_extra_css       = ""
+    decoracion_abs      = ""      # HTML decorativo posicionado absolutamente (detrás del texto)
+    decoracion_after_hl = ""      # Elemento decorativo dentro del flujo stacked
+    _p2_rule            = False
+    _p5_dot             = False
+
+    if i6 == 0:
+        # ─── P1 PREMIUM OSCURO ───────────────────────────────────────
+        # Sistema: headline en color de marca (no blanco) + separador punto +
+        # recipient blanco con glow + círculo watermark esquina inferior.
+        # Referencia: packaging premium, trofeos Cannes Lions.
+        hl_weight    = "200"
+        hl_tracking  = "0.22em"
+        rec_tracking = "-0.03em"
+        sub_tracking = "0.32em"
+        hl_extra_css  = f"text-transform: uppercase; color: {struct_color}; opacity: 0.92;"
+        rec_extra_css = "text-shadow: 0 4px 32px rgba(0,0,0,0.60);"
+        sub_extra_css = "font-weight: 300; text-transform: uppercase; opacity: 0.50;"
+        # Círculo watermark esquina inferior derecha — profundidad editorial
+        cs = int(min(w, h) * 0.72)
+        cx = int(w * 0.80)
+        cy = int(h * 0.74)
+        decoracion_abs = (
+            f'<div style="position:absolute;left:{cx - cs//2}px;top:{cy - cs//2}px;'
+            f'width:{cs}px;height:{cs}px;border:2px solid {struct_color};'
+            f'opacity:0.16;border-radius:50%"></div>'
+        )
+        # Punto de acento entre headline y recipient
+        decoracion_after_hl = (
+            f'<div style="width:9px;height:9px;border-radius:50%;'
+            f'background:{struct_color};opacity:0.88;align-self:center;margin:3px 0"></div>'
+        )
+
+    elif i6 == 1:
+        # ─── P2 EDITORIAL BLANCO ─────────────────────────────────────
+        # Sistema: recipient en color primario de marca (magenta/azul/etc. sobre blanco)
+        # + headline ultra-thin casi invisible + regla editorial.
+        # Referencia: editorial fashion magazine, AWS Awards, Dezeen.
+        hl_weight    = "200"
+        hl_tracking  = "0.28em"
+        rec_tracking = "-0.04em"
+        sub_tracking = "0.38em"
+        hl_line_height = "1.22"
+        hl_extra_css  = "text-transform: uppercase; opacity: 0.52;"
+        sub_extra_css = "font-weight: 200; text-transform: uppercase; opacity: 0.40;"
+        # Recipient en color secundario/acento si tiene contraste suficiente sobre fondo claro
+        _p2_color = struct_color if _is_vivid(struct_color) and _ratio_contraste(struct_color, "#F5F5F5") >= 2.8 else (
+            accent_dec if _is_vivid(accent_dec) and _ratio_contraste(accent_dec, "#F5F5F5") >= 2.8 else ""
+        )
+        if _p2_color:
+            rec_extra_css = f"color: {_p2_color};"
+        _p2_rule = True
+
+    elif i6 == 2:
+        # ─── P3 GRÁFICO AUDAZ ────────────────────────────────────────
+        # Sistema: barra vertical GRUESA de marca (20px) + barra horizontal cruzada
+        # + recipient ENORME tracking muy apretado. Tensión gráfica extrema.
+        # Referencia: PepsiCo BAM, Nike campaign, Pentagram editorial.
+        hl_tracking  = "0.07em"
+        rec_tracking = "-0.05em"
+        sub_tracking = "0.16em"
+        hl_extra_css  = "text-transform: uppercase; opacity: 0.70;"
+        rec_extra_css = "text-shadow: 0 8px 60px rgba(0,0,0,0.72);"
+        sub_extra_css = "text-transform: uppercase; opacity: 0.65;"
+        # Barra vertical gruesa — elemento gráfico principal
+        bar_w   = max(14, int(w * 0.040))
+        bar_x   = max(2, margin_px - bar_w - 6)
+        bar_top = int(h * 0.06)
+        bar_h   = int(h * 0.88)
+        # Barra horizontal cruzada — tensión gráfica en la zona del recipient
+        cross_y = int(h * 0.47)
+        cross_w = int(w * 0.28)
+        decoracion_abs = (
+            f'<div style="position:absolute;left:{bar_x}px;top:{bar_top}px;'
+            f'width:{bar_w}px;height:{bar_h}px;background:{struct_color};'
+            f'opacity:0.95;border-radius:2px"></div>'
+            f'<div style="position:absolute;left:{bar_x + bar_w + 2}px;top:{cross_y}px;'
+            f'width:{cross_w}px;height:2px;background:{struct_color};opacity:0.45"></div>'
+        )
+
+    elif i6 == 3:
+        # ─── P4 BILLBOARD IMPACTO ────────────────────────────────────
+        # Sistema: banda de color de marca detrás del recipient (no gris oscuro) +
+        # glow dramático en el nombre. Headline como micro-badge con tracking extremo.
+        # Referencia: festival posters, Time magazine covers.
+        hl_weight    = "700"
+        hl_tracking  = "0.16em"
+        rec_tracking = "-0.03em"
+        sub_tracking = "0.26em"
+        hl_extra_css  = "text-transform: uppercase; opacity: 0.78;"
+        rec_extra_css = (
+            f"text-shadow: 0 8px 65px rgba(0,0,0,0.80), "
+            f"0 3px 22px rgba(0,0,0,0.45);"
+        )
+        sub_extra_css = "text-transform: uppercase; opacity: 0.70;"
+        # Banda de color de marca (no gris oscuro) — da calidez y coherencia cromática
+        band_top = int(h * 0.20)
+        band_h   = int(h * 0.52)
+        if bg_tone in ("dark", "mid"):
+            # Usa el secundario si es vívido (efecto Booking: amarillo sobre azul)
+            _band_col = struct_color if _is_vivid(struct_color) else accent_dec
+            band_style = f"background:{_band_col};opacity:0.28"
+        else:
+            band_style = "background:rgba(0,0,0,0.14);opacity:1"
+        decoracion_abs = (
+            f'<div style="position:absolute;left:0;top:{band_top}px;'
+            f'width:{w}px;height:{band_h}px;{band_style}"></div>'
+        )
+
+    elif i6 == 4:
+        # ─── P5 MÍNIMO MODERNO ───────────────────────────────────────
+        # Sistema: recipient en color de marca (si contraste OK) + headline casi
+        # imperceptible + triple punto separador en acento de marca.
+        # Referencia: Swiss design, Muji, Apple, trofeos Wired.
+        hl_weight    = "200"
+        hl_tracking  = "0.22em"
+        rec_tracking = "0.01em"
+        sub_tracking = "0.40em"
+        hl_line_height = "1.25"
+        hl_extra_css  = "text-transform: uppercase; opacity: 0.55;"
+        sub_extra_css = "font-weight: 200; text-transform: uppercase; opacity: 0.36;"
+        _p5_color = struct_color if _is_vivid(struct_color) and _ratio_contraste(struct_color, "#F5F5F5") >= 2.8 else (
+            accent_dec if _is_vivid(accent_dec) and _ratio_contraste(accent_dec, "#F5F5F5") >= 2.8 else ""
+        )
+        if _p5_color:
+            rec_extra_css = f"color: {_p5_color};"
+        _p5_dot = True
+
+    else:
+        # ─── P6 MARCA PURA ───────────────────────────────────────────
+        # Sistema: fondo sólido del primario + círculo watermark centrado +
+        # regla gruesa de marca + recipient con glow suave.
+        # Referencia: trofeos Apple Design Awards, GQ España.
+        hl_weight    = "300"
+        hl_tracking  = "0.18em"
+        rec_tracking = "-0.02em"
+        sub_tracking = "0.26em"
+        hl_extra_css  = "text-transform: uppercase; opacity: 0.65;"
+        rec_extra_css = "text-shadow: 0 4px 42px rgba(0,0,0,0.52);"
+        sub_extra_css = "text-transform: uppercase; opacity: 0.60;"
+        # Círculo watermark centrado — textura geométrica sobre el sólido de marca
+        cs = int(min(w, h) * 0.70)
+        cx = w // 2
+        cy = int(h * 0.52)
+        decoracion_abs = (
+            f'<div style="position:absolute;left:{cx - cs//2}px;top:{cy - cs//2}px;'
+            f'width:{cs}px;height:{cs}px;border:3px solid white;'
+            f'opacity:0.12;border-radius:50%"></div>'
+        )
+        # Regla ancha y gruesa bajo el headline — usa secundario si vívido, si no blanco
+        _p6_rule_color = struct_color if _is_vivid(struct_color) else "white"
+        _p6_rule_op = "0.85" if _is_vivid(struct_color) else "0.42"
+        decoracion_after_hl = (
+            f'<div style="width:78%;height:3px;background:{_p6_rule_color};'
+            f'opacity:{_p6_rule_op};align-self:center"></div>'
+        )
+
+    # ── CSS completo ─────────────────────────────────────────────────
+    base_css = f"""
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+        width: {w}px; height: {h}px;
+        overflow: hidden; position: relative;
+        background: url('{bg_data_url}') center/cover no-repeat;
+    }}
+    .hl {{
+        font-family: {font_family_css};
+        font-size: {hl_px}px; font-weight: {hl_weight};
+        color: {hl_color}; text-align: {hl_align};
+        line-height: {hl_line_height};
+        letter-spacing: {hl_tracking};
+        overflow-wrap: break-word; word-break: break-word;
+        {hl_extra_css}
+    }}
+    .rec {{
+        font-family: {font_family_css};
+        font-size: {rec_px}px; font-weight: 700;
+        color: {rec_color}; text-align: {rec_align};
+        line-height: {rec_line_height};
+        letter-spacing: {rec_tracking};
+        overflow-wrap: break-word; word-break: break-word;
+        text-transform: {rec_upper};
+        {rec_extra_css}
+    }}
+    .sub {{
+        font-family: {font_family_css};
+        font-size: {sub_px}px; font-weight: 400;
+        color: {sub_color}; text-align: {sub_align};
+        line-height: 1.30; letter-spacing: {sub_tracking};
+        overflow-wrap: break-word;
+        {sub_extra_css}
+    }}
+    .fecha {{
+        font-family: {font_family_css};
+        font-size: {sub_px}px; font-weight: 300;
+        color: {sub_color}; text-align: {sub_align};
+        letter-spacing: {sub_tracking}; opacity: 0.70;
+    }}
+    """
+
+    # ── Layouts ──────────────────────────────────────────────────────
+
+    # Margen inferior y posición del headline respetando el logo
+    _mg_bot = int(h * 0.04)  # margen para subtitle/fecha (abajo, no depende del logo)
+    # El headline siempre empieza DEBAJO del logo — nunca antes
+    _hl_top = max(int(h * 0.04), logo_bottom + int(h * 0.018))
+
+    # P2: regla editorial bajo el headline
+    if _p2_rule:
+        rule_y  = _hl_top + hl_px + 12
+        rule_w  = int((w - 2 * margin_px) * 0.45)
+        rule_x  = margin_px if hl_align != "center" else (w - rule_w) // 2
+        decoracion_abs = (
+            f'<div style="position:absolute;top:{rule_y}px;'
+            f'left:{rule_x}px;width:{rule_w}px;'
+            f'height:1px;background:{rec_color};opacity:0.22"></div>'
+        )
+    # P5: triple punto de acento en color de marca
+    if _p5_dot:
+        gap_available = max(0, h // 2 - rec_px // 2 - _hl_top - hl_px)
+        dot_y = _hl_top + hl_px + max(10, gap_available // 2 - 5)
+        dot_y = min(dot_y, h // 2 - rec_px // 2 - 22)
+        dot_color = struct_color if _is_vivid(struct_color) else (accent_dec if _is_vivid(accent_dec) else rec_color)
+        decoracion_abs = (
+            f'<div style="position:absolute;top:{dot_y}px;left:50%;'
+            f'transform:translateX(-50%);display:flex;gap:9px;align-items:center;">'
+            f'<div style="width:5px;height:5px;border-radius:50%;'
+            f'background:{dot_color};opacity:0.60"></div>'
+            f'<div style="width:7px;height:7px;border-radius:50%;'
+            f'background:{dot_color};opacity:0.90"></div>'
+            f'<div style="width:5px;height:5px;border-radius:50%;'
+            f'background:{dot_color};opacity:0.60"></div>'
+            f'</div>'
+        )
+
+    # Layout: spread (P2 editorial, P5 minimal)
+    if layout == "spread":
+        sub_bot = _mg_bot + sub_px + (int(h * 0.04) if fecha else 0)
+        body = f"""
+        {decoracion_abs}
+        {f'<div class="hl" style="position:absolute;top:{_hl_top}px;left:{zone_l}px;right:{zone_r}px">{headline}</div>' if headline else ''}
+        {f'<div class="rec" style="position:absolute;top:50%;transform:translateY(-50%);left:{zone_l}px;right:{zone_r}px">{recipient}</div>' if recipient else ''}
+        {f'<div class="sub" style="position:absolute;bottom:{sub_bot}px;left:{zone_l}px;right:{zone_r}px">{subtitle}</div>' if subtitle else ''}
+        {f'<div class="fecha" style="position:absolute;bottom:{_mg_bot}px;left:{zone_l}px;right:{zone_r}px">{fecha}</div>' if fecha else ''}
+        """
+
+    # Layout: staggered (P3 gráfico audaz)
+    # Headline arriba a la DERECHA · Recipient ENORME a la IZQUIERDA · Subtitle DERECHA abajo
+    # La tensión diagonal ES el concepto — no es un error de alineación
+    elif layout == "staggered":
+        sub_bot = _mg_bot + sub_px + (int(h * 0.04) if fecha else 0)
+        body = f"""
+        {decoracion_abs}
+        {f'<div class="hl" style="position:absolute;top:{_hl_top}px;left:{zone_l}px;right:{zone_r}px;text-align:right">{headline}</div>' if headline else ''}
+        {f'<div class="rec" style="position:absolute;top:50%;transform:translateY(-50%);left:{zone_l}px;right:{zone_r}px;text-align:left">{recipient}</div>' if recipient else ''}
+        {f'<div class="sub" style="position:absolute;bottom:{sub_bot}px;left:{zone_l}px;right:{zone_r}px;text-align:right">{subtitle}</div>' if subtitle else ''}
+        {f'<div class="fecha" style="position:absolute;bottom:{_mg_bot}px;left:{zone_l}px;right:{zone_r}px;text-align:right">{fecha}</div>' if fecha else ''}
+        """
+
+    # Layout: billboard (P4 — nombre como póster)
+    # Headline: micro-caption justo bajo el logo
+    # Recipient: inicio dinámico bajo el headline (nunca toca el logo)
+    # Subtitle/fecha: anclados al fondo
+    elif layout == "billboard":
+        sub_bot  = _mg_bot + sub_px + (int(h * 0.035) if fecha else 0)
+        rec_top  = _hl_top + hl_px + max(8, gap)   # recipient empieza bajo el headline
+        body = f"""
+        {decoracion_abs}
+        {f'<div class="hl" style="position:absolute;top:{_hl_top}px;left:{zone_l}px;right:{zone_r}px">{headline}</div>' if headline else ''}
+        {f'<div class="rec" style="position:absolute;top:{rec_top}px;left:{zone_l}px;right:{zone_r}px">{recipient}</div>' if recipient else ''}
+        {f'<div class="sub" style="position:absolute;bottom:{sub_bot}px;left:{zone_l}px;right:{zone_r}px">{subtitle}</div>' if subtitle else ''}
+        {f'<div class="fecha" style="position:absolute;bottom:{_mg_bot}px;left:{zone_l}px;right:{zone_r}px">{fecha}</div>' if fecha else ''}
+        """
+
+    # Layout: stacked (P1, P6 — y fallback)
+    else:
+        y_start = int(logo_bottom + (h - logo_bottom) * 0.10)
+        y_end   = int(h * 0.97)
+        mid     = (y_start + y_end) // 2
+
+        if anchor == "top":
+            pos = f"top:{y_start}px"
+        elif anchor == "bottom":
+            pos = f"bottom:{h - y_end}px"
+        else:
+            pos = f"top:{mid}px;transform:translateY(-50%)"
+
+        flex_align = {"left": "flex-start", "right": "flex-end"}.get(rec_align, "center")
+
+        items = []
+        if headline:
+            items.append(f'<div class="hl">{headline}</div>')
+            if decoracion_after_hl:
+                items.append(decoracion_after_hl)
+        if recipient: items.append(f'<div class="rec">{recipient}</div>')
+        if subtitle:  items.append(f'<div class="sub">{subtitle}</div>')
+        if fecha:     items.append(f'<div class="fecha">{fecha}</div>')
+
+        body = f"""
+        {decoracion_abs}
+        <div style="position:absolute;left:{zone_l}px;right:{zone_r}px;
+                    {pos};display:flex;flex-direction:column;
+                    align-items:{flex_align};gap:{gap}px;">
+            {"".join(items)}
+        </div>
+        """
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+{font_css}
+{base_css}
+</style></head>
+<body>{body}</body></html>"""
+
+
+def _render_texto_html(concepto: dict, img: Image.Image, award: dict,
+                       w: int, h: int, logo_bottom: int) -> Image.Image:
+    """
+    Renderiza el texto del galardón con HTML/CSS + Chromium headless.
+    img: PIL Image con fondo + logo ya compuestos.
+    Devuelve PIL Image con el texto superpuesto.
+    """
+    browser = _get_browser()
+    if browser is None:
+        print("  [HTML] ✗ Playwright no disponible — fallback PIL")
+        return _render_texto(concepto, img, award, w, h, logo_bottom)
+    print(f"  [HTML] ✓ Playwright activo (Chromium {browser.version})")
+
+    # ── Calcular tamaños de fuente con PIL (métricas reales de la fuente) ──
+    # CSS renderiza mejor, pero no puede reducir si la fuente es demasiado ancha.
+    # PIL mide el ancho real de cada palabra con la fuente exacta y reduce hasta que encaje.
+    tc             = concepto.get("text_style", {})
+    font_family    = tc.get("font_family")
+    font_style     = tc.get("font_style", "bold")
+    font_style_cat = tc.get("font_style_category", "")
+    margin_px      = max(16, int(w * 0.08))
+    text_width     = max(60, w - 2 * margin_px)
+
+    headline  = award.get("headline",  "") or ""
+    recipient = award.get("recipient", "") or ""
+    subtitle  = award.get("subtitle",  "") or ""
+
+    # Aplicar uppercase ANTES de medir — CSS text-transform no reduce el font-size automáticamente
+    # Las mayúsculas son ~15% más anchas que minúsculas en fuentes proporcionales
+    if tc.get("recipient_uppercase") and recipient:
+        recipient_medida = recipient.upper()
+    else:
+        recipient_medida = recipient
+
+    sz_hl  = max(8, min(int(h * float(tc.get("headline_size_ratio",  0.090))),
+                        int(text_width * 0.35)))
+    sz_rec = max(8, min(int(h * float(tc.get("recipient_size_ratio", 0.18))),
+                        int(text_width * 0.42)))
+    sz_sub = max(7, min(int(h * float(tc.get("subtitle_size_ratio",  0.040))),
+                        int(text_width * 0.22)))
+
+    font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+    font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+    font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style, style_category=font_style_cat)
+
+    _dummy_draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+
+    def _mw(texto, font):
+        if not texto: return 0
+        return max((_tw(_dummy_draw, p, font) for p in texto.split()), default=0)
+
+    limite = int(text_width * 0.96)
+    for _ in range(30):
+        changed = False
+        if _mw(headline,        font_hl)  > limite:
+            sz_hl  = max(8, int(sz_hl  * 0.88))
+            font_hl  = _cargar_fuente_marca(sz_hl,  font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+            changed  = True
+        if _mw(recipient_medida, font_rec) > limite:
+            sz_rec = max(8, int(sz_rec * 0.88))
+            font_rec = _cargar_fuente_marca(sz_rec, font_family, weight=700, style_fallback=font_style, style_category=font_style_cat)
+            changed  = True
+        if _mw(subtitle,        font_sub) > limite:
+            sz_sub = max(7, int(sz_sub * 0.88))
+            font_sub = _cargar_fuente_marca(sz_sub, font_family, weight=400, style_fallback=font_style, style_category=font_style_cat)
+            changed  = True
+        if not changed:
+            break
+
+    print(f"  [HTML] Tamaños: hl={sz_hl}px  rec={sz_rec}px  sub={sz_sub}px")
+
+    bg_url = _img_to_data_url(img)
+    html   = _build_html(concepto, award, bg_url, w, h, logo_bottom, sz_hl, sz_rec, sz_sub)
+
+    # Escribir a fichero temporal para que Playwright pueda cargar Google Fonts
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".html", mode="w", encoding="utf-8", delete=False
+    )
+    tmp.write(html)
+    tmp.close()
+    file_url = "file:///" + tmp.name.replace("\\", "/")
+
+    try:
+        page = browser.new_page(viewport={"width": w, "height": h})
+        # load → DOM + subrecursos locales cargados; más rápido y fiable que networkidle
+        page.goto(file_url, wait_until="load", timeout=15000)
+        page.wait_for_timeout(120)  # pequeño margen para fuentes @font-face
+        png_bytes = page.screenshot(type="png", full_page=False)
+        page.close()
+    except Exception as e:
+        print(f"  [HTML] Error en screenshot: {e} — fallback PIL")
+        try: page.close()
+        except Exception: pass
+        try: os.unlink(tmp.name)
+        except Exception: pass
+        return _render_texto(concepto, img, award, w, h, logo_bottom)
+    finally:
+        try: os.unlink(tmp.name)
+        except Exception: pass
+
+    result = Image.open(BytesIO(png_bytes)).convert("RGB")
+    print(f"  [HTML] Screenshot OK — {w}×{h}px")
+    return result
 
 
 # ─── Función principal ────────────────────────────────────────────────────────
@@ -877,15 +1675,30 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
     from scripts import capa_dalle
 
     dalle_prompt   = concepto.get("dalle_prompt", "")
-    color_fallback = concepto.get("color_overlay", {}).get("color", "#1A1A2E")
+    # Para fondos claros (P2/P5) el color_fallback es el color primario de la marca
+    # (usado como tinte muy sutil), no como fondo — los generadores lo usarán correctamente.
+    # Para oscuros el overlay.color = primario de marca = base del fondo.
+    bg_tone_pre = concepto.get("bg_tone", "dark")
+    ov_color    = (concepto.get("color_overlay") or {}).get("color", "") or ""
+    _secondary  = (concepto.get("_secondary") or "")
+    # Intentar sacar el primario: overlay.color si está seteado, si no el texto hl_color
+    _hl_col     = (concepto.get("text_style") or {}).get("headline_color", "") or ""
+    color_fallback = (ov_color or _secondary or _hl_col or
+                      ("#F8F8F5" if bg_tone_pre == "light" else "#1A1A2E"))
     pid = concepto.get("proposal_id", "?")
 
     # ── Paso 1: Fondo artístico ───────────────────────────────────────
     print(f"    [DALLE-FONDO] Generando fondo para propuesta {pid}...")
-    img = capa_dalle.generar_fondo(dalle_prompt, w, h, color_fallback)
+    img = capa_dalle.generar_fondo(dalle_prompt, w, h, color_fallback, concepto=concepto)
 
     # ── Paso 2: Overlay de coherencia cromática ───────────────────────
-    img = _apply_overlay(img, concepto.get("color_overlay", {}), w, h)
+    # P1 y P3 usan DALLE para el fondo — el overlay aplanaría su creatividad.
+    # Solo aplicar overlay si la propuesta no es P1 ni P3.
+    _i6_ov = (concepto.get("proposal_id", 1) - 1) % 6
+    _ov_cfg = concepto.get("color_overlay", {})
+    if _i6_ov in (0, 2) and dalle_prompt:  # P1/P3 con fondo DALLE: sin overlay
+        _ov_cfg = {}
+    img = _apply_overlay(img, _ov_cfg, w, h)
 
     # ── Paso 3: Logo (PIL) ────────────────────────────────────────────
     img, logo_bottom = _render_logo(concepto, img, logo_path, w, h)
@@ -893,11 +1706,11 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
     if concepto.get("logo", {}).get("position") == "bottom_center":
         logo_bottom = int(h * 0.04)
 
-    # ── Paso 4: Texto — siempre PIL (tipografía dirigida por Claude) ─────────
+    # ── Paso 4: Texto — HTML/CSS + Playwright (tipografía real de marca) ────
     tc_info = concepto.get("text_style", {})
     layout  = tc_info.get("layout", "stacked")
     anchor  = tc_info.get("text_anchor", "center")
-    print(f"    [TEXTO-PIL] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
-    img = _render_texto(concepto, img, award, w, h, logo_bottom)
+    print(f"    [TEXTO-HTML] P{pid}: layout={layout}  anchor={anchor}  logo_treatment={concepto.get('logo',{}).get('treatment','?')}")
+    img = _render_texto_html(concepto, img, award, w, h, logo_bottom)
 
     return img

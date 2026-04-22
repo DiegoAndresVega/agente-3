@@ -71,6 +71,43 @@ def register_local_font(family_name: str, data: bytes, ext: str = "ttf") -> Path
     return dest
 
 
+# Caché en memoria de familias que fallaron en Google Fonts — evita reintentos
+_failed_google: set[str] = set()
+
+# ─── Catálogo tipográfico por categoría visual ────────────────────────────────
+# Fuentes ordenadas de más a menos fiel al estilo visual.
+# Usadas como fallback cuando la fuente principal no está en Google Fonts.
+FONT_CATALOG: dict[str, list[str]] = {
+    # Terminales circulares, letras casi redondas, tono friendly/playful
+    "burbuja":       ["Fredoka One", "Comfortaa", "Nunito", "Pacifico", "Righteous",
+                      "Varela Round"],
+    # Sans-serif moderno con esquinas suavizadas — más neutro que burbuja
+    "redondeado":    ["Nunito Sans", "Quicksand", "Varela Round", "DM Sans",
+                      "Jost", "Outfit"],
+    # Trazos limpios y uniformes, neutral y moderno
+    "geometrico":    ["Jost", "Outfit", "Barlow", "Inter", "Urbanist",
+                      "Plus Jakarta Sans", "Figtree"],
+    # Proporciones orgánicas, cálido y legible
+    "humanista":     ["Lato", "Source Sans 3", "Open Sans", "Raleway", "Mulish",
+                      "Nunito Sans"],
+    # Sans-serif neutro profesional, institucional
+    "corporativo":   ["Montserrat", "IBM Plex Sans", "Work Sans", "Figtree",
+                      "Roboto", "Inter"],
+    # Estrecho y alto, para titulares de impacto
+    "condensado":    ["Barlow Condensed", "Oswald", "Exo 2", "Rajdhani",
+                      "Bebas Neue", "Kanit"],
+    # Serifa con contraste, editorial y actual
+    "serif_moderno": ["Playfair Display", "DM Serif Display", "Cormorant Garamond",
+                      "Lora"],
+    # Serifa tradicional o académica
+    "serif_clasico": ["Lora", "Merriweather", "Libre Baskerville", "Noto Serif",
+                      "Playfair Display"],
+    # Personalidad propia, experimental o muy expresiva
+    "display":       ["Josefin Sans", "Space Grotesk", "Syne", "Bebas Neue",
+                      "Raleway", "Barlow Condensed"],
+}
+
+
 def get_font_path(family: str | None, weight: int = 700) -> Path | None:
     """
     Devuelve un Path local a un .ttf de Google Fonts (descargado y cacheado).
@@ -103,6 +140,10 @@ def get_font_path(family: str | None, weight: int = 700) -> Path | None:
         print(f"  [fonts] Usando caché: {dest.name}")
         return dest
 
+    # Si esta familia ya falló en Google Fonts en esta sesión, no reintentar
+    if family in _failed_google:
+        return None
+
     FONTS_DIR.mkdir(parents=True, exist_ok=True)
 
     family_url = family.replace(" ", "+")
@@ -121,6 +162,17 @@ def get_font_path(family: str | None, weight: int = 700) -> Path | None:
         match = re.search(r"url\((https://[^)]+\.(?:ttf|woff2?))\)", css)
         if not match:
             print(f"  [fonts] No se encontró URL de fuente para '{family}' w{weight}")
+            # Muchas fuentes display solo tienen peso 400 (ej: Fredoka One, Pacifico)
+            # Si pedimos 700 y falla, intentar con 400 antes de abandonar
+            if weight != 400:
+                alt = get_font_path(family, 400)
+                if alt:
+                    # Enlazar como el peso solicitado para que los lookups futuros lo encuentren
+                    import shutil
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(alt, dest)
+                    print(f"  [fonts] '{family}' solo tiene w400 — usando como w{weight}")
+                    return dest
             return None
 
         font_url  = match.group(1)
@@ -130,10 +182,12 @@ def get_font_path(family: str | None, weight: int = 700) -> Path | None:
         return dest
 
     except requests.RequestException as e:
-        print(f"  [fonts] Error de red para '{family}' w{weight}: {e}")
+        print(f"  [fonts] '{family}' no disponible en Google Fonts — usando fallback")
+        _failed_google.add(family)
         return None
     except Exception as e:
         print(f"  [fonts] Error inesperado para '{family}' w{weight}: {e}")
+        _failed_google.add(family)
         return None
 
 
@@ -152,3 +206,39 @@ def warmup(family: str | None, weights: list[int] | None = None) -> dict[int, Pa
     for w in weights:
         result[w] = get_font_path(family, w)
     return result
+
+
+def get_font_path_with_fallback(
+    family: str | None,
+    style_category: str | None = None,
+    weight: int = 700,
+) -> Path | None:
+    """
+    Intenta descargar `family`. Si falla (no existe en Google Fonts),
+    prueba en orden las alternativas del mismo `style_category` del catálogo.
+
+    Esto garantiza que siempre se use la fuente visualmente más cercana
+    aunque el nombre exacto no esté disponible en Google Fonts.
+
+    Args:
+        family:         nombre de familia (Google Fonts o local)
+        style_category: categoría visual ("burbuja", "geometrico", etc.)
+        weight:         peso numérico (400=regular, 700=bold)
+    """
+    # 1. Intentar la fuente principal
+    path = get_font_path(family, weight)
+    if path:
+        return path
+
+    # 2. Si falla y tenemos categoría, probar alternativas del catálogo
+    if style_category and style_category in FONT_CATALOG:
+        for alt in FONT_CATALOG[style_category]:
+            if alt == family:
+                continue
+            path = get_font_path(alt, weight)
+            if path:
+                print(f"  [fonts] Fallback tipográfico: '{family}' → '{alt}' "
+                      f"(categoría: {style_category})")
+                return path
+
+    return None

@@ -1,6 +1,9 @@
 # Configuración local de Claude Code (puede contener claves API)
 .claude/
 
+# Memoria exportada de Claude Code — SÍ incluida en el repo para migración
+# _claude_memory/ → NO ignorar
+
 # Entorno virtual Python
 venv/
 

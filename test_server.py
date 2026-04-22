@@ -11,6 +11,14 @@ Luego abre: http://localhost:5000
 import os
 import sys
 import uuid
+
+# Windows usa cp1252 por defecto — forzar UTF-8 en el stream existente (in-place)
+# reconfigure() modifica el stream actual, no crea uno nuevo, por lo que Flask/Werkzeug
+# también usan la nueva codificación desde el inicio.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 import base64
 import shutil
 from pathlib import Path
@@ -590,6 +598,8 @@ def index():
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    import traceback
+    traceback.print_exc()
     return jsonify({"error": f"Error del servidor: {str(e)}"}), 500
 
 @app.errorhandler(413)
@@ -802,8 +812,20 @@ if __name__ == "__main__":
 
     print("\n" + "="*50)
     print("  SUSTAIN AWARDS · Test Server")
-    print("  Claude claude-sonnet-4-6 + gpt-image-1 (low)")
+    from scripts.capa_dalle import CALIDAD_IMAGEN, USE_DALLE
+    _dalle_info = f"gpt-image-1 ({CALIDAD_IMAGEN})" if USE_DALLE else "PIL fallback (DALLE off)"
+    print(f"  Claude claude-sonnet-4-6 + {_dalle_info}")
+
+    # Pre-calentar Playwright en el hilo principal para que los threads de Flask
+    # usen el browser cacheado sin necesitar re-importar playwright
+    from scripts.capa2_renderer import _get_browser as _pw_prewarm
+    _pw_ok = _pw_prewarm()
+    if _pw_ok:
+        print(f"  [HTML] Playwright OK: Chromium v{_pw_ok.version}")
+    else:
+        print("  [HTML] Playwright no disponible — fallback PIL activo")
+
     print("="*50)
     print("\n  Abre en el navegador: http://localhost:5000")
     print("  Ctrl+C para detener\n")
-    app.run(debug=False, port=5000)
+    app.run(debug=False, port=5000, threaded=False)

@@ -75,7 +75,7 @@ def codificar_imagen(fuente) -> tuple[str, str]:
 
 
 PDF_MAX_BYTES       = 4 * 1024 * 1024   # 4 MB — por encima se muestrea
-PDF_PAGINAS_VISUAL  = 16                 # máximo de páginas visuales a enviar a Claude
+PDF_PAGINAS_VISUAL  = 10                 # máximo de páginas visuales a enviar a Claude
 
 
 def _colores_dominantes_imagen(img_pil: "Image.Image", n: int = 6) -> list[str]:
@@ -261,7 +261,7 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
 
         for i in indices:
             pag = doc[i]
-            mat = fitz.Matrix(1.5, 1.5)      # ~108 dpi — suficiente para análisis
+            mat = fitz.Matrix(1.2, 1.2)      # ~86 dpi — análisis visual ok, payload menor
             pix = pag.get_pixmap(matrix=mat)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
@@ -270,7 +270,7 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
                 colores_graficos.add(c)
 
             buf = BytesIO()
-            img.save(buf, format="JPEG", quality=75)
+            img.save(buf, format="JPEG", quality=65)
             b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
             imagenes_b64.append(b64)
             kb_total += len(buf.getvalue()) // 1024

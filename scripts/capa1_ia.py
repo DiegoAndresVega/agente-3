@@ -58,7 +58,8 @@ Devuelve EXCLUSIVAMENTE un JSON válido, sin texto adicional, sin markdown:
     "style": "sans-serif|serif|display|monospace",
     "brand_name_length": "corto|medio|largo",
     "font_name": "nombre exacto de la fuente principal del brandbook (ej: Futura PT, DIN Pro, FF Clan). null si no identificable.",
-    "google_fonts_name": "nombre EXACTO en Google Fonts si la fuente está disponible o tiene equivalente cercano (ej: Montserrat, Raleway, Roboto). null si no hay equivalente razonable.",
+    "font_style_category": "burbuja|redondeado|geometrico|humanista|corporativo|condensado|serif_moderno|serif_clasico|display",
+    "google_fonts_name": "nombre EXACTO en Google Fonts del equivalente más cercano visualmente.",
     "google_fonts_weights": [400, 700]
   },
   "graphic_resources": {
@@ -82,8 +83,52 @@ Reglas:
 - primary_tint: mezcla primario con blanco (35%). Calcula el HEX.
 - primary_shade: mezcla primario con negro (30%). Calcula el HEX.
 - Si no hay brandbook ni web, deduce todo del logo.
-- typography.font_name: extrae el nombre exacto de la fuente principal mencionada en el brandbook. null si no hay mención explícita.
-- typography.google_fonts_name: si esa fuente está en Google Fonts o tiene equivalente cercano, escribe el nombre exacto como aparece en fonts.google.com (mayúsculas exactas). null si no hay equivalente razonable.
+- typography.font_name: nombre exacto mencionado en el brandbook. null si no hay mención explícita.
+- typography.font_style_category + typography.google_fonts_name: analiza el logotipo con estos criterios:
+
+  INSPECCIÓN VISUAL (aplica al logotipo o tipografía visible en el brandbook):
+    1. TERMINALES: ¿Las letras terminan en corte recto (geométrico) o en remate circular/burbuja?
+    2. CONTRAFORMAS: ¿El interior de 'o','a','d','g' es casi circular (burbuja) o rectangular (corporativo)?
+    3. PROPORCIÓN: ¿Letras anchas y circulares (playful) o compactas y estrechas (condensado)?
+    4. TRAZO: ¿Grosor uniforme monolinear (geométrico/rounded) o contraste grueso-fino (humanista/serif)?
+    5. PERSONALIDAD: ¿Juvenil/friendly/orgánico o sobrio/profesional/neutro?
+
+  CATEGORÍAS → escribe en font_style_category + elige google_fonts_name de la lista:
+    "burbuja"      → terminales muy redondeados, letras casi circulares, tono friendly/playful
+                     "Fredoka One" (circular compacta), "Comfortaa" (geométrica redondeada),
+                     "Nunito" (redondeada elegante), "Pacifico" (script amigable),
+                     "Righteous" (geométrica display redondeada)
+
+    "redondeado"   → sans-serif moderno con esquinas suavizadas — más neutro que burbuja
+                     "Varela Round", "Quicksand", "Nunito Sans", "DM Sans", "Jost"
+
+    "geometrico"   → trazos limpios y uniformes, esquinas angulosas, neutral y moderno
+                     "Inter", "Outfit", "Barlow", "Urbanist", "Plus Jakarta Sans"
+
+    "humanista"    → proporciones orgánicas, trazos con algo de contraste, cálido y legible
+                     "Lato", "Source Sans 3", "Open Sans", "Raleway", "Mulish"
+
+    "corporativo"  → sans-serif neutro profesional, institucional
+                     "Montserrat", "Roboto", "IBM Plex Sans", "Work Sans", "Figtree"
+
+    "condensado"   → estrecho y alto, tipografía de impacto para titulares
+                     "Barlow Condensed", "Oswald", "Exo 2", "Rajdhani", "Bebas Neue"
+
+    "serif_moderno" → serifa con contraste, actual y editorial
+                     "Playfair Display", "DM Serif Display", "Cormorant Garamond"
+
+    "serif_clasico" → serifa tradicional, institucional o académica
+                     "Lora", "Merriweather", "Libre Baskerville", "Noto Serif"
+
+    "display"      → tipografía con fuerte personalidad propia, experimental
+                     "Josefin Sans", "Space Grotesk", "Syne", "Bebas Neue"
+
+  EJEMPLO: smöoy usa terminales circulares, letras anchas y amigables → "burbuja" → "Fredoka One"
+  EJEMPLO: Helvetica/Arial → "corporativo" → "Inter" o "IBM Plex Sans"
+  EJEMPLO: Futura → "geometrico" → "Jost" o "Outfit"
+
+- typography.google_fonts_name: SIEMPRE proporciona un nombre utilizable (nunca null salvo sin assets).
+  Si la fuente está en Google Fonts → escríbela exactamente tal como aparece en fonts.google.com.
 - typography.google_fonts_weights: siempre [400, 700] como mínimo.
 - Responde SOLO con el JSON.\
 """
@@ -93,135 +138,207 @@ Eres el director creativo de una agencia premium de galardones corporativos.
 Tu trabajo: generar 6 conceptos de diseño radicalmente distintos para un trofeo/galardón.
 
 MANDATO CREATIVO:
-No tienes plantillas. Inventas desde cero partiendo de la personalidad real de esta marca.
-Cada concepto debe tener una IDENTIDAD VISUAL completamente diferente.
+Cada propuesta es un CONCEPTO VISUAL DISTINTO — no una variación de paleta, sino un lenguaje
+visual diferente. Piensa como si fueran 6 agencias distintas respondiendo al mismo brief.
+La jerarquía es siempre: Logo → Título → NOMBRE DEL PREMIADO (héroe) → Organización.
+El nombre del premiado es SIEMPRE el elemento tipográfico más grande y con mayor contraste.
 
-DIFERENCIACIÓN OBLIGATORIA entre los 6 conceptos:
-  1. Tonos de fondo BIEN DISTRIBUIDOS: exactamente 2 oscuros, 2 claros, 2 medios/coloridos
-     — NO hagas 3 o más oscuros seguidos, ni 2 conceptos con fondo casi idéntico
-  2. Posición del logo diferente en cada uno
-  3. Tratamiento tipográfico radicalmente diferente en cada uno:
-     — Algunos: ultra-bold condensed, otros: serif editorial, otros: geométrico
-     — Algunos: recipient enorme hero (ratio 0.18), otros: tamaño moderado (0.10)
-  4. Colores de texto distintos: no repitas la misma combinación en dos conceptos
-  5. text_style.text_anchor OBLIGATORIO variado: P1=top, P2=center, P3=bottom,
-     P4=bottom, P5=center, P6=top — sin repetir el mismo anchor en propuestas consecutivas
-  6. text_style.layout OBLIGATORIO variado — los 5 tipos deben repartirse:
-     P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=vertical, P6=stacked
-     Este campo ES OBLIGATORIO en cada propuesta. No lo omitas nunca.
-  7. En fondos CLAROS usa siempre texto oscuro (#1A1A1A, #002E3C, #333333)
-     En fondos OSCUROS usa siempre texto claro (#FFFFFF, #FFD700, #E0E0E0)
-  8. Uso del logo CREATIVO y variado — elige entre estas opciones:
-     - "blanco"    → logo en blanco, para fondos oscuros (clásico)
-     - "negro"     → logo en negro, para fondos claros o blancos
-     - "color"     → logo en colores originales de marca, para fondos neutros/claros
-     - "watermark" → logo grande semitransparente centrado en el fondo (opacity: 0.12–0.20),
-                     crea profundidad y presencia de marca sin competir con el texto
-     - "banda"     → franja horizontal del color primario de marca que cruza el trofeo,
-                     el logo aparece en blanco sobre ella (band_color: "#HEX del primario")
-     Cada propuesta debe usar un tratamiento diferente. No repitas el mismo en dos seguidas.
+USO DE LA PALETA COMPLETA — colores primario, secundario Y acento:
+  El secundario (secondary) y el acento (accent) son tan importantes como el primario.
+  Úsalos como elementos ESTRUCTURALES: banda de color, bloque de fondo, franja horizontal.
+  NO los uses solo para pequeños detalles — crea zonas visuales de color contrastante.
+  EJEMPLO Booking.com: primary=azul, secondary=amarillo → banda amarilla en el top es el diseño.
+  EJEMPLO Nike: primary=negro, accent=naranja → bloque naranja como elemento central.
 
-CAMPO dalle_prompt — SOLO EL FONDO ARTÍSTICO:
+  - color_overlay.color: pon SIEMPRE el secundario o acento aquí (no el primario — ya es el fondo).
+  - Para el logo treatment "banda": usa secondary como band_color cuando el primario es el fondo.
+  - headline_color / recipient_color: varía entre primary, secondary y accent en los 6 conceptos.
+
+POSICIONAMIENTO COMPOSITIVO — el texto debe estar en zonas distintas por concepto:
+  P1: texto en zona IZQUIERDA (el sistema lo anclará a la izquierda — tú pon contenido interesante)
+  P2: texto CENTRADO — editorial y equilibrado
+  P3: texto STAGGERED — ya lo maneja el layout, pon colores y tamaños dramáticos
+  P4: texto CENTRADO — el nombre lo llena todo
+  P5: texto en zona DERECHA — el sistema lo anclará a la derecha
+  P6: texto CENTRADO — identidad simétrica de marca
+
+  IMPORTANTE: esta variedad de posición (izquierda/centro/derecha) la gestiona el sistema.
+  Tu trabajo es crear CONTENIDO y COLORES distintos para cada zona.
+
+LOS 6 CONCEPTOS VISUALES (uno por propuesta — respétalos en ese orden):
+
+  P1 — PREMIUM OSCURO
+    Concepto: corporativo de alta gama, oscuro y elegante.
+    Fondo oscuro (primario oscuro de marca o navy profundo). Logo arriba en blanco.
+    Recipient en blanco o dorado. Texto compacto bajo el logo.
+    bg_tone=dark, layout=stacked, logo arriba.
+
+  P2 — EDITORIAL BLANCO
+    Concepto: minimalismo editorial, espacio blanco generoso, como los trofeos de AWS o Danone.
+    Fondo BLANCO (#FFFFFF) → dalle_prompt="" (fondo sólido, sin DALLE).
+    Logo prominente arriba, en negro o color.
+    recipient_color: USA EL COLOR PRIMARIO VIVIDO DE MARCA si tiene contraste ≥ 3:1 sobre blanco
+      para texto grande — el nombre del premiado en magenta/rojo/azul sobre blanco puro es una
+      elección editorial PODEROSA y de diseñador. Si no hay suficiente contraste, usa el oscuro.
+    Mucho espacio vacío entre los elementos — el aire ES el diseño.
+    bg_tone=light, layout=spread, logo arriba.
+
+  P3 — GRÁFICO AUDAZ
+    Concepto: impacto tipográfico extremo, como PepsiCo BAM. El nombre es un elemento gráfico.
+    Fondo oscuro sólido o con textura mínima. Recipient en mayúsculas, enorme, alineado a la izquierda.
+    Headline pequeño alineado a la derecha arriba. Tensión visual diagonal — es intencional.
+    bg_tone=dark, layout=staggered, recipient uppercase=true.
+
+  P4 — BILLBOARD IMPACTO
+    Concepto: el nombre del premiado lo llena casi todo. Máximo impacto visual y cromático.
+    Fondo con el COLOR DE MARCA como protagonista — puede ser vibrante, saturado, alegre.
+    Para marcas coloridas: bg_tone=mid (no dark) para dejar que el color de marca brille.
+    Para marcas corporativas/oscuras: bg_tone=dark con gradiente del primario.
+    Recipient centra el canvas. Headline y subtitle como micro-captions arriba y abajo.
+    layout=billboard.
+    OBLIGATORIO: añade watermark del logo (opacity 0.12–0.16) o banda de color como anclaje.
+
+  P5 — MÍNIMO MODERNO
+    Concepto: espacio, geometría y limpieza. Fondo blanco o muy claro.
+    Fondo MUY CLARO o blanco → dalle_prompt="" (fondo sólido).
+    Layout spread: headline arriba pequeño, recipient grande en el centro, subtitle abajo.
+    Logo en negro o color.
+    recipient_color: igual que P2 — usa el primario vivido de marca si hay contraste suficiente.
+      Una variación: usa el mismo color que P2 o experimenta con un tono ligeramente diferente.
+    bg_tone=light, layout=spread, logo puede estar abajo.
+
+  P6 — MARCA PURA
+    Concepto: el color de marca como protagonista absoluto, identidad sin filtros.
+    Fondo: color primario sólido → dalle_prompt="" (el sistema genera un gradiente radial
+    con banda diagonal del secundario y watermark geométrico — no necesitas describir el fondo).
+    Logo blanco arriba. Recipient en blanco (#FFFFFF) para máximo contraste.
+    Para marcas VIVIDAS/ALEGRES: usa recipient en blanco o en secondary si hay contraste.
+    Para marcas OSCURAS/CORPORATIVAS: recipient en blanco puro + headline con tracking amplio.
+    bg_tone=dark, layout=stacked.
+
+COLOR OVERLAY — tinta de coherencia cromática (USAR CON PRUDENCIA):
+  Propósito: añadir un velo muy sutil del color de marca sobre el fondo DALLE para cohesión.
+  - active=true SOLO si el fondo DALLE necesita anclarse cromáticamente a la marca.
+  - opacity MÁXIMA: 0.18 — por encima de eso destruye la creatividad del fondo generado.
+  - active=false en P2/P5 (fondos blancos — sin tinta) y en P1 si el fondo ya usa colores de marca.
+  - NUNCA uses opacity > 0.20 — el sistema lo recortará igualmente a 0.28 por seguridad.
+
+REGLAS DE COHERENCIA (aplicables a TODOS los conceptos):
+  1. Fondos bien distribuidos: mínimo 2 oscuros (P1, P3 o P4, P6), mínimo 2 claros (P2, P5)
+  2. Tratamiento de logo diferente en cada propuesta — no repitas el mismo en dos seguidas
+  3. En fondos CLAROS (P2, P5): usa el primario vivido de marca para el recipient si contraste ≥ 3:1
+     (texto grande). Para headline y subtitle: usa oscuro (#1A1A1A o equivalente).
+     PROHIBIDO para headline/subtitle: texto gris claro, colores luminosos sin contraste
+  4. En fondos OSCUROS (P1, P3, P4, P6): texto claro OBLIGATORIO (#FFFFFF, #FFD700, accent)
+     PROHIBIDO: texto gris medio, colores apagados
+  5. Recipient (nombre del premiado) = elemento tipográfico más grande en TODOS los conceptos
+     NUNCA: headline más grande que recipient
+
+CAMPO dalle_prompt — FONDO ARTÍSTICO CON PERSONALIDAD POR CONCEPTO:
+
+  REGLAS UNIVERSALES:
   - En INGLÉS, retrato vertical (portrait)
-  - Describe ÚNICAMENTE el fondo: texturas, geometría, gradientes, iluminación, atmósfera
-  - USA los colores REALES de la marca (primary, secondary de brand_analysis.colors) en los prompts
-    Ejemplo: si primary=#005B99, escribe "#005B99 deep blue" en el prompt de DALLE.
-  - NO incluyas texto, tipografía, letras ni palabras
-  - NO menciones logos, personas ni caras
+  - Describe ÚNICAMENTE el fondo — sin texto, sin logos, sin personas
   - Termina SIEMPRE con: "No text, no logos, no people. Premium award background."
-  - Propuesta 6: dalle_prompt = "" (fondo sólido monocromo, sin generación IA)
+  - P2 y P5: dalle_prompt = "" (fondo sólido blanco/claro, sin generación IA)
+  - P6: dalle_prompt = "" (fondo sólido del primario de marca, sin generación IA)
+  - Los 3 prompts DALLE (P1, P3, P4) DEBEN ser visualmente radicalmente distintos entre sí.
+    PROHIBIDO: repetir la misma técnica (ej. dos gradientes radiales, dos texturas de grano).
 
-  Ejemplos de dalle_prompt bien escritos:
-    "Deep navy #1A237E background with subtle gold geometric lines radiating from center.
-     Soft vignette edges, dramatic studio lighting, premium corporate texture.
-     No text, no logos, no people. Premium award background."
+  PERSONALIDAD VISUAL POR CONCEPTO — OBLIGATORIO diferente técnica en cada uno:
 
-    "Clean white #FFFFFF with bold horizontal band in brand color #2E7D32 at center.
-     Editorial minimalist composition, soft shadows on the band edges.
-     No text, no logos, no people. Premium award background."
+  P1 (PREMIUM OSCURO) → Atmosférico, cinematográfico, casi táctil.
+    Base MUY OSCURA (negro profundo o primario muy shade). Acento luminoso del secundario.
+    Elige UNA técnica distinta según el tono de la marca:
+      lujo/institucional → rayo de luz diagonal dorada, grano fotográfico, niebla specular
+      tecnológico/moderno → glow neón muy sutil en el secundario, grid difuso, humo geométrico
+      sostenible/cultural → textura orgánica oscura (piedra, corteza, agua negra), acento verde/tierra
+      deportivo/creativo → fondo negro con splash de color bold en una esquina, energía contenida
+    REGLA: el fondo de P1 debe verse como el packaging de un producto de alta gama.
 
-REGLA CRÍTICA — subtitle (organización):
+  P3 (GRÁFICO AUDAZ) → Diseño gráfico puro — NOT fotografía, NOT gradientes suaves.
+    Base muy oscura + UN elemento geométrico GRANDE y AUDAZ.
+    Elige UNA técnica:
+      marcas saturadas (rosa, naranja, verde) → arco enorme del color de marca cortando el canvas
+      marcas corporativas (azul, gris) → franja diagonal SÓLIDA del primario, grid de líneas del secundario
+      marcas con identidad fuerte → forma geométrica bold (triángulo, rectángulo) en el accent color
+    El elemento geométrico ocupa 30-50% del canvas. Nada de texturas etéreas.
+
+  P4 (BILLBOARD IMPACTO) → El fondo ES el color de marca. Energía máxima.
+    Técnicas por tono de marca:
+      lujo/premium → halftone dorado fino sobre el primario, gradiente oscuro-brillante
+      moderno/tech → gradiente explosivo del primario al secundario, partículas geométricas
+      colorido/lúdico (helados, moda) → el color de marca a PLENO VOLUMEN con textura bold:
+        acuarela densa en los tonos de marca, manchas de color superpuestas, fondo tipo cartel pop
+        ¡NO tengas miedo de fondos VIVOS y ALEGRES para marcas alegres!
+      deportivo → explosión radial del color primario, como un estadio encendido
+    RECUERDA: para marcas con colores VIBRANTES (rosa, amarillo, turquesa), un fondo saturado
+    y alegre ES la elección correcta. No lo oscurezcas artificialmente.
+
+  ESTRATEGIA DE COLOR ADAPTATIVA:
+  Marca FORMAL / LUJO / INSTITUCIONAL (brand_tone = formal|lujo|institucional):
+    P1 → negro profundo, acento dorado o gris platino, luz especular elegante
+    P3 → geometría limpia y precisa, una sola forma contundente
+    P4 → halftone refinado, gradiente oscuro-a-profundo con el primario como acento vibrante
+
+  Marca TECNOLÓGICA / MODERNA / SOSTENIBLE (brand_tone = tecnologico|moderno|sostenible):
+    P1 → oscuro con velo azul-verde del primario, glow neón muy contenido
+    P3 → grid o circuito abstracto en el accent, forma geométrica del primario
+    P4 → gradiente vibrante primario→secundario, energía digital
+
+  Marca DEPORTIVA / CULTURAL / CREATIVA / LÚDICA (brand_tone = deportivo|cultural|creativo):
+    P1 → oscuro fotográfico con destello del color de marca, textura rugosa
+    P3 → forma ENORME del color de marca (no temas usar rosa, amarillo, verde lima aquí)
+    P4 → color de marca A TOPE — acuarela, manchas, poster bold — ¡SÍ a los fondos alegres!
+
+REGLA CRÍTICA — subtitle:
   El subtitle SIEMPRE es el nombre del cliente/empresa premiada (brand_name del análisis).
-  NUNCA escribas el nombre de la empresa organizadora del evento ni ninguna marca de premios.
-  Si no sabes el nombre del cliente, usa el brand_name del análisis de marca.
+  NUNCA escribas el nombre del organizador del evento ni ninguna marca de premios.
 
-REGLA CRÍTICA — contraste de texto:
-  - Fondo OSCURO (bg_tone=dark): recipient y headline en colores MUY CLAROS (#FFFFFF, #FFD700, #E0E0E0).
-    NUNCA uses gris medio o colores apagados sobre fondo oscuro.
-  - Fondo CLARO (bg_tone=light): recipient y headline en colores MUY OSCUROS (#000000, #1A1A1A, primario de marca).
-    NUNCA uses gris claro, blanco ni colores pálidos sobre fondo claro.
-  - Fondo MEDIO (bg_tone=mid): usa el color primario de la marca si tiene suficiente contraste,
-    o negro/blanco según la luminancia del fondo.
-  El contraste mínimo aceptable es 4.5:1 (WCAG AA). Textos ilegibles arruinan el diseño.
+REGLA CRÍTICA — contraste (INCUMPLIRLA hace el diseño ilegible):
+  - bg_tone=dark: recipient y headline en #FFFFFF, #FFD700 o accent muy claro.
+    NUNCA gris medio ni colores apagados sobre oscuro.
+  - bg_tone=light: recipient y headline en #000000, #1A1A1A o primario MUY OSCURO de marca.
+    PROHIBIDO en fondo claro: azul luminoso (#4FC3F7, #64B5F6), gris medio (#AAAAAA),
+    cualquier color con luminancia > 40% — quedan invisibles sobre blanco.
+  El contraste mínimo es 4.5:1 (WCAG AA).
 
-DIRECCIÓN TIPOGRÁFICA — eres el tipógrafo del proyecto:
-  El sistema renderiza el texto con la fuente de marca exacta. Tú decides cómo se ve
-  cada elemento en cada propuesta. Varía radicalmente entre las 6 propuestas.
+USO DEL LOGO — elige entre estas opciones, varía en cada propuesta:
+  - "blanco"    → logo remapeado a blanco, para fondos oscuros
+  - "negro"     → logo remapeado a negro, para fondos claros
+  - "color"     → colores originales, para fondos neutros/claros
+  - "watermark" → logo semitransparente centrado (opacity 0.12–0.20), profundidad sin ruido
+  - "banda"     → franja horizontal del primario, logo blanco sobre ella
 
-  FUENTE (font_family):
-    - Usa el valor de typography.google_fonts_name del análisis. Si es null, escribe null.
-    - Es la misma en los 6 conceptos (es la fuente corporativa de la marca).
+DIRECCIÓN TIPOGRÁFICA:
+  FUENTE: usa typography.google_fonts_name del análisis en los 6 conceptos.
+    P3 puede usar fuente condensada creativa si lo requiere el concepto.
 
-  TAMAÑOS — crea contraste expresivo (recipient debe ser 3–5× mayor que subtitle):
-    recipient_size_ratio : 0.08–0.22  (nombre del premiado — varía dramáticamente)
-    headline_size_ratio  : 0.035–0.08 (título del premio)
-    subtitle_size_ratio  : 0.025–0.05 (organización — siempre el más pequeño)
-    Ejemplos de contraste fuerte: rec=0.20/hl=0.045/sub=0.030 (billboard ultra)
-                                  rec=0.14/hl=0.070/sub=0.042 (editorial equilibrado)
-                                  rec=0.10/hl=0.055/sub=0.032 (compacto elegante)
+  JERARQUÍA (forzada por el sistema, solo orienta tus ratios):
+    recipient_size_ratio : 0.15–0.22  (siempre el mayor)
+    headline_size_ratio  : ~50% del recipient ratio elegido
+    subtitle_size_ratio  : ~23% del recipient ratio elegido
 
-  ALINEACIONES — independientes por elemento, créalas para reforzar el layout:
-    recipient_alignment / headline_alignment / subtitle_alignment : "left"|"center"|"right"
-    Combinaciones con personalidad:
-    - Todo centrado → formal, institucional (Danone, AWS)
-    - hl=right / rec=left / sub=right → diagonal, moderno (PepsiCo BAM)
-    - Todo left → editorial, minimalista (Enter Award)
-    - hl=left / rec=center / sub=left → híbrido premium
-    - hl=center / rec=center / sub=right → jerárquico asimétrico
-
-  COLORES (HEX exactos — SIEMPRE verificar contraste con bg_tone):
-    REGLA PRINCIPAL: usa los colores REALES de la marca de brand_analysis.colors (primary, secondary, accent, colors_extended).
-    colors_extended es la paleta completa — úsala para variedad entre propuestas.
-    Al menos 3 de los 6 conceptos deben tener recipient_color o headline_color = primary o secondary de marca.
-    recipient_color: primary/secondary de marca con contraste suficiente; si primary es oscuro y fondo es oscuro → usa #FFFFFF o tint claro
-    headline_color : secondary, accent o un color de colors_extended que contraste y diferencie del recipient
-    subtitle_color : versión discreta — primary_tint, neutral de marca, o gris
-    Fondo OSCURO: recipient en text_on_dark (de brand_analysis) o color primario claro + headline en secondary o accent
-    Fondo CLARO: recipient en primary o text_on_light + headline en secondary o primary_shade
-    Fondo MEDIO: recipient en primary si contrasta 4.5:1+, sino el de mayor contraste de colors_extended
+  ALINEACIONES:
+    P1, P2, P4, P5, P6: todo centrado ("center")
+    P3 (staggered): headline="right", recipient="left", subtitle="right" — la asimetría es el diseño
 
   MAYÚSCULAS:
-    recipient_uppercase: true  → impacto, modernidad (marcas geométricas, deportivas, tech)
-    recipient_uppercase: false → elegancia, cercanía (marcas naturales, sanitarias, culturales)
+    recipient_uppercase: true → impacto (P3, P4 siempre; otros según marca)
+    recipient_uppercase: false → elegancia (P1, P2, P5, P6 por defecto)
 
   ESPACIADO:
-    spacing_scale: 0.5 (bloque denso, impactante) | 1.0 (estándar) | 1.8 (aireado, lujoso)
+    spacing_scale: 0.5 (denso/impactante) | 1.0 (estándar) | 1.8 (aireado/lujoso)
 
-CAMPO text_style.text_anchor — posición del bloque stacked en el canvas:
-  (En layouts spread/staggered/billboard/vertical el sistema lo ignora — posiciona automáticamente)
-  - "top"    → texto en la parte alta
-  - "center" → centrado verticalmente
-  - "bottom" → texto en la parte baja
-  Distribución: P1=top, P2=center, P3=bottom, P4=bottom, P5=center, P6=top
-
-CAMPO text_style.layout — distribución espacial del texto en el canvas:
-  Tienes 5 opciones. OBLIGATORIO variar entre los 6 conceptos:
-  - "stacked"   → bloque compacto bajo el logo, posición controlada por text_anchor.
-                  Uso en fondos cargados o cuando el logo domina la composición.
-  - "spread"    → canvas completo: headline en lo alto del trofeo, recipient en el centro
-                  exacto, subtitle/fecha en la parte baja. Gran espacio vacío entre zonas.
-                  Efecto editorial premium (estilo Danone Institute, AWS).
-  - "staggered" → canvas completo + asimetría extrema: headline pequeño alineado DERECHA
-                  arriba, recipient ENORME alineado IZQUIERDA en el centro, subtitle DERECHA
-                  abajo. Tensión visual diagonal. Para marcas atrevidas (estilo PepsiCo BAM).
-  - "billboard" → canvas completo: recipient llena casi todo el trofeo, headline micro-caption
-                  arriba, subtitle micro-caption abajo. El nombre del premiado lo es TODO.
-                  Máximo impacto. Ideal para marcas minimalistas o de lujo.
-  - "vertical"  → recipient girado 90° ocupa toda la altura del lado derecho del trofeo.
-                  Headline y subtitle quedan en el lado izquierdo (arriba y abajo).
-                  Efecto lateral dramático (estilo Enter Award). Para marcas vanguardistas.
-  Distribución obligatoria: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=vertical, P6=stacked
-  (billboard y vertical como máximo una vez cada uno)
+CAMPO text_style.layout — distribución del texto en el canvas:
+  - "stacked"   → bloque compacto bajo el logo. Posición por text_anchor (top/center/bottom).
+  - "spread"    → headline arriba del canvas, recipient en el centro exacto, subtitle abajo.
+                  Gran espacio vacío entre zonas — efecto editorial premium.
+  - "staggered" → headline pequeño alineado DERECHA arriba, recipient ENORME alineado IZQUIERDA
+                  centro, subtitle DERECHA abajo. Tensión diagonal deliberada. Solo para P3.
+  - "billboard" → recipient domina el canvas, headline y subtitle como micro-captions. Solo P4.
+  PROHIBIDO: "vertical" (texto girado 90° — ilegible en objeto físico)
+  Distribución: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
 
 JERARQUÍA FIJA: recipient > headline > subtitle (siempre, en todos los conceptos)
 
@@ -356,13 +473,28 @@ def _llamar_claude(mensajes: list[dict], system_prompt: str,
         )
 
     client = anthropic.Anthropic(api_key=api_key)
-    respuesta = client.messages.create(
-        model=MODELO_CLAUDE,
-        max_tokens=6000,
-        temperature=temperatura,
-        system=system_prompt,
-        messages=mensajes,
-    )
+
+    # Retry hasta 2 veces para errores 500 transitorios de Anthropic
+    ultimo_error = None
+    for intento in range(2):
+        try:
+            respuesta = client.messages.create(
+                model=MODELO_CLAUDE,
+                max_tokens=6000,
+                temperature=temperatura,
+                system=system_prompt,
+                messages=mensajes,
+            )
+            break
+        except anthropic.APIStatusError as e:
+            ultimo_error = e
+            if e.status_code == 500 and intento == 0:
+                print(f"  [{etiqueta}] Error 500 de Anthropic — reintentando...")
+                import time; time.sleep(3)
+            else:
+                raise
+    else:
+        raise ultimo_error
 
     texto = respuesta.content[0].text.strip()
 
@@ -513,8 +645,39 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
     headline_txt  = award.get('headline')  or 'Excellence Award'
     subtitle_txt  = award.get('subtitle')  or 'Sustain Awards'
     fecha_line = f"\n- Fecha/Año   : {award.get('fecha', '')}" if award.get("fecha") else ""
-    typo      = brand_analysis.get("typography", {})
-    font_name = typo.get("google_fonts_name") or typo.get("font_name") or "sin datos"
+    typo           = brand_analysis.get("typography", {})
+    google_font = typo.get("google_fonts_name")   # solo fuentes descargables
+    brand_tone  = brand_analysis.get("brand_tone", "institucional")
+
+    if google_font:
+        font_estrategia = (
+            f"ESTRATEGIA DE FUENTES — varía obligatoriamente entre propuestas:\n"
+            f"  P1: '{google_font}' — fuente de marca exacta, fidelidad total\n"
+            f"  P2: '{google_font}' — fuente de marca exacta, variante de layout\n"
+            f"  P3: fuente creativa/condensada que contraste con la marca — "
+            f"elige según brand_tone '{brand_tone}': "
+            f"institucional→'Barlow Condensed', moderno→'Exo 2', lujo→'Cormorant Garamond', "
+            f"sostenible→'Josefin Sans', tech→'Rajdhani'\n"
+            f"  P4: fuente display/impactante muy diferente — "
+            f"institucional→'Oswald', moderno→'Bebas Neue', lujo→'Playfair Display', "
+            f"sostenible→'Nunito', tech→'Orbitron'\n"
+            f"  P5: fuente editorial o experimental — "
+            f"institucional→'Libre Baskerville', moderno→'DM Serif Display', "
+            f"lujo→'Cormorant', sostenible→'Lora', tech→'Space Grotesk'\n"
+            f"  P6: '{google_font}' — vuelta a la marca con tratamiento distinto\n"
+            f"Escribe el nombre EXACTO de Google Fonts en font_family de cada propuesta."
+        )
+    else:
+        font_estrategia = (
+            f"ESTRATEGIA DE FUENTES — fuente de marca no disponible en Google Fonts:\n"
+            f"  P1, P2: null (usa fuente del sistema, fiel a la marca)\n"
+            f"  P3: fuente condensada creativa según brand_tone '{brand_tone}': "
+            f"institucional→'Barlow Condensed', moderno→'Exo 2', lujo→'Cormorant Garamond'\n"
+            f"  P4: fuente display impactante: institucional→'Oswald', moderno→'Bebas Neue', lujo→'Playfair Display'\n"
+            f"  P5: fuente editorial: institucional→'Libre Baskerville', moderno→'DM Serif Display', lujo→'Cormorant'\n"
+            f"  P6: null (fiel a la marca)"
+        )
+
     content.append({"type": "text", "text": (
         f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
         f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text):\n"
@@ -523,7 +686,7 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
         f"- Organización        : {subtitle_txt}\n"
         f"{fecha_line}\n"
         f"- Evento              : {evento.get('nombre', '')}\n\n"
-        f"FUENTE DE MARCA (para text_style.font_family): {font_name}\n\n"
+        f"{font_estrategia}\n\n"
         "Genera los 6 conceptos. Incluye estos textos literalmente en award_text."
     )})
 
@@ -538,22 +701,37 @@ def _llamada_design_concepts(pedido: dict, brand_analysis: dict) -> list:
 
 # ─── Validación ───────────────────────────────────────────────────────────────
 
-def _validar_concepto(c: dict, idx: int) -> dict:
-    # text_anchor rota entre top/center/bottom para garantizar variedad entre propuestas
-    _anchors = ["top", "center", "bottom", "top", "center", "bottom"]
-    _layouts  = ["stacked", "spread", "staggered", "billboard", "vertical", "stacked"]
+def _validar_concepto(c: dict, idx: int, font_style_category: str = "",
+                      secondary_color: str = "", accent_color: str = "") -> dict:
+    # ── Parámetros FORZADOS — 6 arquetipos visuales distintos ──
+    # Claude controla colores, dalle_prompt y award_text; el sistema controla estructura.
+    # JERARQUÍA FIJA: recipient (100%) > headline (45-50%) > subtitle (22-25%)
+    _anchors  = ["top",     "center",  "center",    "center",   "top",     "center"]
+    _layouts  = ["stacked", "spread",  "staggered", "billboard","spread",  "stacked"]
+    # P1 PREMIUM OSCURO:   stacked LEFT zone  — texto anclado izquierda
+    # P2 EDITORIAL BLANCO: spread FULL WIDTH  — editorial centrado
+    # P3 GRÁFICO AUDAZ:    staggered FULL     — barra izquierda + texto diagonal
+    # P4 BILLBOARD:        billboard CENTER   — nombre domina el canvas
+    # P5 MÍNIMO MODERNO:   spread RIGHT zone  — texto anclado derecha
+    # P6 MARCA PURA:       stacked CENTER     — identidad simétrica
+    _rec_sz   = [0.18,      0.22,      0.20,        0.22,       0.18,      0.16]
+    _hl_sz    = [0.090,     0.100,     0.082,       0.090,      0.085,     0.080]
+    _sub_sz   = [0.040,     0.048,     0.038,       0.042,      0.040,     0.037]
+    _spacing  = [1.2,       0.8,       0.6,         0.8,        1.0,       1.6]
+    _upper    = [False,     True,      True,        True,       False,     False]
+    # Alineaciones: P1 izquierda, P3 diagonal, P5 derecha, resto centrado
+    _hl_alns  = ["left",    "center",  "right",     "center",   "right",   "center"]
+    _rec_alns = ["left",    "center",  "left",      "center",   "right",   "center"]
+    _sub_alns = ["left",    "center",  "right",     "center",   "right",   "center"]
+
+    # ── Defaults (solo se aplican si Claude no proporcionó el campo) ───────────
     _rec_cols = ["#FFFFFF", "#FFD700", "#FFFFFF", "#FFD700", "#FFFFFF", "#E0E0E0"]
     _hl_cols  = ["#FFD700", "#FFFFFF", "#FFFFFF", "#E0E0E0", "#FFD700", "#FFFFFF"]
     _sub_cols = ["#BBBBBB", "#AAAAAA", "#CCCCCC", "#999999", "#AAAAAA", "#BBBBBB"]
-    _hl_alns  = ["center",  "left",   "right",   "center",  "left",   "center"]
-    _rec_alns = ["center",  "center", "left",    "center",  "center", "center"]
-    _sub_alns = ["center",  "left",   "right",   "center",  "left",   "center"]
-    _rec_sz   = [0.16,      0.14,     0.18,      0.20,      0.15,     0.12]
-    _hl_sz    = [0.065,     0.070,    0.045,     0.038,     0.060,    0.055]
-    _sub_sz   = [0.040,     0.038,    0.030,     0.028,     0.035,    0.032]
-    _spacing  = [1.0,       1.6,      0.8,       0.6,       1.2,      1.0]
-    _upper    = [False,     False,    True,      True,      False,    False]
+
     i6 = idx % 6
+
+    # Aplicar defaults para campos que Claude no generó
     defaults = {
         "proposal_id":      idx + 1,
         "pattern_name":     f"Concepto {idx + 1}",
@@ -563,23 +741,13 @@ def _validar_concepto(c: dict, idx: int) -> dict:
         "color_overlay":    {"active": False, "color": "#1A1A1A", "opacity": 0.15},
         "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
         "text_style":       {
-            "text_anchor":          _anchors[i6],
-            "layout":               _layouts[i6],
             "font_family":          None,
-            "margin_h":             0.07,
+            "margin_h":             0.08,
             "recipient_color":      _rec_cols[i6],
             "headline_color":       _hl_cols[i6],
             "subtitle_color":       _sub_cols[i6],
-            "recipient_size_ratio": _rec_sz[i6],
-            "headline_size_ratio":  _hl_sz[i6],
-            "subtitle_size_ratio":  _sub_sz[i6],
-            "recipient_alignment":  _rec_alns[i6],
-            "headline_alignment":   _hl_alns[i6],
-            "subtitle_alignment":   _sub_alns[i6],
-            "recipient_uppercase":  _upper[i6],
-            "spacing_scale":        _spacing[i6],
         },
-        "award_text":       {"headline": "Excellence Award", "recipient": "Nombre Apellido", "subtitle": "Organización"},
+        "award_text": {"headline": "Excellence Award", "recipient": "Nombre Apellido", "subtitle": "Organización"},
     }
     for k, v in defaults.items():
         if k not in c or c[k] is None:
@@ -588,6 +756,41 @@ def _validar_concepto(c: dict, idx: int) -> dict:
             for sk, sv in v.items():
                 if sk not in c[k] or c[k][sk] is None:
                     c[k][sk] = sv
+
+    # Forzar siempre la estructura tipográfica y layout del slot — garantía de variedad
+    ts = c.setdefault("text_style", {})
+    ts["layout"]               = _layouts[i6]
+    ts["text_anchor"]          = _anchors[i6]
+    ts["recipient_size_ratio"] = _rec_sz[i6]
+    ts["headline_size_ratio"]  = _hl_sz[i6]
+    ts["subtitle_size_ratio"]  = _sub_sz[i6]
+    ts["spacing_scale"]        = _spacing[i6]
+    ts["recipient_uppercase"]  = _upper[i6]
+    ts["recipient_alignment"]  = _rec_alns[i6]
+    ts["headline_alignment"]   = _hl_alns[i6]
+    ts["subtitle_alignment"]   = _sub_alns[i6]
+    # Propagar categoría de estilo tipográfico al renderer para fallback inteligente
+    if font_style_category:
+        ts["font_style_category"] = font_style_category
+
+    # Propagar colores de marca secundario/acento — el renderer los usa como
+    # color estructural en barras, bandas y elementos decorativos grandes.
+    if secondary_color:
+        c["_secondary"] = secondary_color
+    if accent_color:
+        c["_accent"] = accent_color
+
+    # Forzar fondo sólido (sin DALLE) para P2, P5, P6
+    if i6 in (1, 4, 5):
+        c["dalle_prompt"] = ""
+
+    # Garantía de no colisión logo–texto:
+    # - "center" solo permitido para watermark (semi-transparente, intencional)
+    # - cualquier logo opaco en "center" se mueve a top_center
+    logo = c.setdefault("logo", {})
+    if logo.get("position") == "center" and logo.get("treatment") != "watermark":
+        logo["position"] = "top_center"
+
     return c
 
 
@@ -622,11 +825,20 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
     print(f"  → Primary: {colores.get('primary', '—')}")
 
     n_aprendizaje = len(list(APRENDIZAJE_DIR.glob("*.json"))) if APRENDIZAJE_DIR.exists() else 0
+    typo = brand_analysis.get("typography", {})
+    style_cat = typo.get("font_style_category", "")
+    print(f"  → Fuente  : {typo.get('google_fonts_name', '—')} [{style_cat or '?'}]")
+
+    secondary_col = colores.get("secondary", "") or ""
+    accent_col    = colores.get("accent", "")    or ""
+
     print(f"\n[B] Design Concepts (ejemplos acumulados: {n_aprendizaje})...")
     conceptos = _llamada_design_concepts(pedido, brand_analysis)
-    conceptos = [_validar_concepto(c, i) for i, c in enumerate(conceptos[:6])]
+    conceptos = [_validar_concepto(c, i, style_cat, secondary_col, accent_col)
+                 for i, c in enumerate(conceptos[:6])]
     while len(conceptos) < 6:
-        conceptos.append(_validar_concepto({}, len(conceptos)))
+        conceptos.append(_validar_concepto({}, len(conceptos), style_cat,
+                                           secondary_col, accent_col))
 
     for c in conceptos:
         print(f"  → P{c['proposal_id']}: {c['pattern_name']} [{c.get('bg_tone','?')}]")

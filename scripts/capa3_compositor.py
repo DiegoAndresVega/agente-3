@@ -46,5 +46,7 @@ def componer(diseno_rgba: Image.Image,
         (zona["ancho"], zona["alto"]), Image.LANCZOS
     )
 
+    if diseno_final.mode != "RGBA":
+        diseno_final = diseno_final.convert("RGBA")
     trofeo.paste(diseno_final, (zona["x"], zona["y"]), diseno_final)
     return trofeo.convert("RGB")
