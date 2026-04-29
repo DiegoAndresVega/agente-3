@@ -99,8 +99,14 @@ def main():
         print(f"\n  Propuesta {pid} — {brief.get('pattern_name', '—')}...")
 
         # Capa 2: renderizar diseño
+        _dc = modelo.get("diseno_constraints", {})
         diseno = capa2.renderizar_diseno(
-            brief, w, h, logo_path, award, fuentes, seed=pid * 100
+            brief, w, h, logo_path, award, fuentes, seed=pid * 100,
+            trophy_margin_h=_dc.get("margen_h_pct"),
+            trophy_effective_width=_dc.get("effective_width_px"),
+            trophy_zone_l=_dc.get("zone_l_px"),
+            trophy_zone_r=_dc.get("zone_r_px"),
+            trophy_zona=zona,
         )
 
         # Capa 3: componer sobre foto del trofeo

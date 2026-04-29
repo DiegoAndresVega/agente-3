@@ -49,6 +49,9 @@ def _cargar_claves(ruta: str = "lakla.txt") -> None:
             elif clave.startswith("sk-ant-"):
                 os.environ["ANTHROPIC_API_KEY"] = clave
                 cargadas.append("ANTHROPIC_API_KEY")
+            elif clave.startswith("fc-"):
+                os.environ["FIRECRAWL_API_KEY"] = clave
+                cargadas.append("FIRECRAWL_API_KEY")
 
     if cargadas:
         print(f"  [claves] Cargadas desde '{ruta}': {', '.join(cargadas)}")
@@ -263,9 +266,9 @@ HTML_FORM = """
       <h2>Assets del cliente</h2>
 
       <div class="field">
-        <label>Logo <span class="hint">(PNG o JPG · obligatorio)</span></label>
+        <label>Logo <span class="hint">(PNG o JPG · recomendado)</span></label>
         <div class="upload-area" onclick="document.getElementById('logo_file').click()">
-          <input type="file" id="logo_file" name="logo" accept=".png,.jpg,.jpeg" required>
+          <input type="file" id="logo_file" name="logo" accept=".png,.jpg,.jpeg">
           <div class="icon">🖼️</div>
           <p><strong>Haz clic para subir</strong> o arrastra aquí</p>
           <p>PNG o JPG</p>
@@ -353,6 +356,7 @@ HTML_FORM = """
         <select name="modelo_trofeo">
           <option value="totem_basic">Totem Basic (madera)</option>
           <option value="placa_a5">Placa A5 (aluminio)</option>
+          <option value="copetin">Copetin (metal)</option>
         </select>
       </div>
     </div>
@@ -663,13 +667,18 @@ def feedback():
 def generar():
     logo_tmp_path = None
     try:
-        # Validar logo (obligatorio)
-        logo_file = request.files.get("logo")
-        if not logo_file or logo_file.filename == "":
-            return jsonify({"error": "El logo es obligatorio"}), 400
+        # Logo (opcional — el sistema funciona con URL o brandbook sin logo)
+        logo_file  = request.files.get("logo")
+        _tiene_logo = logo_file and logo_file.filename != ""
+        logo_bytes  = logo_file.read() if _tiene_logo else None
+        logo_ext    = Path(logo_file.filename).suffix.lstrip(".") if _tiene_logo else "png"
 
-        logo_bytes = logo_file.read()
-        logo_ext   = Path(logo_file.filename).suffix.lstrip(".")
+        # Validar que hay al menos UNA fuente de identidad
+        url_input = request.form.get("url_corporativa", "").strip()
+        pdf_file_check = request.files.get("brandbook")
+        _tiene_pdf = pdf_file_check and pdf_file_check.filename != ""
+        if not _tiene_logo and not url_input and not _tiene_pdf:
+            return jsonify({"error": "Proporciona al menos el logo, la URL corporativa o el brandbook"}), 400
 
         # PDF (opcional)
         pdf_file  = request.files.get("brandbook")
@@ -715,10 +724,11 @@ def generar():
             },
         }
 
-        # Guardar logo temporal en disco
-        logo_tmp_path = PROJECT_ROOT / "assets" / "logos" / f"_test_{job_id}.{logo_ext}"
-        logo_tmp_path.write_bytes(logo_bytes)
-        pedido["assets"]["logo_path"] = str(logo_tmp_path.relative_to(PROJECT_ROOT))
+        # Guardar logo temporal en disco (solo si se subió)
+        if logo_bytes:
+            logo_tmp_path = PROJECT_ROOT / "assets" / "logos" / f"_test_{job_id}.{logo_ext}"
+            logo_tmp_path.write_bytes(logo_bytes)
+            pedido["assets"]["logo_path"] = str(logo_tmp_path.relative_to(PROJECT_ROOT))
 
         os.chdir(PROJECT_ROOT)
 
@@ -730,13 +740,24 @@ def generar():
         if _font_upload_stem:
             brand_context["fuente_upload"] = _font_upload_stem
 
-        # Capa 1: diseño IA
-        briefs, spec = capa1.diseñar_desde_contexto(pedido, brand_context)
-
-        # Capas 2+3: render y compositing
+        # Cargar modelo del trofeo ANTES de Capa 1 para pasar sus constraints al diseño
         modelo  = capa3.cargar_modelo_trofeo(pedido["modelo_trofeo"])
         zona    = modelo["zona_imprimible"]
         w, h    = zona["ancho"], zona["alto"]
+        pedido["_trophy"] = {
+            "id":          modelo["id"],
+            "nombre":      modelo["nombre"],
+            "ancho":       zona["ancho"],
+            "alto":        zona["alto"],
+            "forma":       zona.get("forma", "rectangular"),
+            "material":    modelo.get("material", ""),
+            "constraints": modelo.get("diseno_constraints", {}),
+        }
+
+        # Capa 1: diseño IA (ya conoce el trofeo vía pedido["_trophy"])
+        briefs, spec = capa1.diseñar_desde_contexto(pedido, brand_context)
+
+        # Capas 2+3: render y compositing
         fuentes = capa2.cargar_fuentes()
 
         (PROJECT_ROOT / "outputs" / "mockups").mkdir(parents=True, exist_ok=True)
@@ -754,10 +775,16 @@ def generar():
                 "fecha":     pedido["award"]["fecha"],
             }
 
+            _dc = modelo.get("diseno_constraints", {})
             diseno = capa2.renderizar_diseno(
                 concepto, w, h,
                 logo_path=brand_context["logo_path"],
-                award=award, fuentes=fuentes, seed=pid * 100
+                award=award, fuentes=fuentes, seed=pid * 100,
+                trophy_margin_h=_dc.get("margen_h_pct"),
+                trophy_effective_width=_dc.get("effective_width_px"),
+                trophy_zone_l=_dc.get("zone_l_px"),
+                trophy_zone_r=_dc.get("zone_r_px"),
+                trophy_zona=zona,
             )
             mockup_img = capa3.componer(diseno, modelo["imagen_base"], zona)
 
@@ -810,22 +837,43 @@ if __name__ == "__main__":
             print(e)
         sys.exit(1)
 
-    print("\n" + "="*50)
+    print("\n" + "="*52)
     print("  SUSTAIN AWARDS · Test Server")
-    from scripts.capa_dalle import CALIDAD_IMAGEN, USE_DALLE
-    _dalle_info = f"gpt-image-1 ({CALIDAD_IMAGEN})" if USE_DALLE else "PIL fallback (DALLE off)"
-    print(f"  Claude claude-sonnet-4-6 + {_dalle_info}")
+    print("="*52)
 
-    # Pre-calentar Playwright en el hilo principal para que los threads de Flask
-    # usen el browser cacheado sin necesitar re-importar playwright
+    # ── Estado de APIs ────────────────────────────────────────────────
+    from scripts.capa_dalle import CALIDAD_IMAGEN, USE_DALLE
+    from scripts.config import MODEL_BRAND_ANALYSIS, MODEL_DESIGN_CONCEPTS, MODEL_COLOR_ORACLE
+
+    _ok  = "✓"
+    _nok = "✗"
+
+    _ant = os.environ.get("ANTHROPIC_API_KEY", "")
+    _oai = os.environ.get("OPENAI_API_KEY", "")
+    _fc  = os.environ.get("FIRECRAWL_API_KEY", "")
+
+    print(f"\n  APIs configuradas:")
+    print(f"    Anthropic       : {_ok + ' ' + _ant[:8]+'...' if _ant else _nok + ' NO CONFIGURADA — los agentes Claude no funcionarán'}")
+    print(f"    OpenAI / DALL·E : {_ok + ' ' + _oai[:8]+'...' if _oai else _nok + ' NO CONFIGURADA — se usará PIL como fallback'}")
+    print(f"    Firecrawl       : {_ok + ' ' + _fc[:8]+'...'  if _fc  else '— no configurada (se usará Color Oracle como fallback)'}")
+
+    print(f"\n  Modelos:")
+    print(f"    Brand Analysis  : {MODEL_BRAND_ANALYSIS}")
+    print(f"    Design Concepts : {MODEL_DESIGN_CONCEPTS}")
+    print(f"    Color Oracle    : {MODEL_COLOR_ORACLE}")
+    _dalle_info = f"gpt-image-1 ({CALIDAD_IMAGEN})" if USE_DALLE else "desactivado — usando PIL"
+    print(f"    DALL·E          : {_dalle_info}")
+
+    # ── Playwright ────────────────────────────────────────────────────
     from scripts.capa2_renderer import _get_browser as _pw_prewarm
     _pw_ok = _pw_prewarm()
+    print(f"\n  Tipografía:")
     if _pw_ok:
-        print(f"  [HTML] Playwright OK: Chromium v{_pw_ok.version}")
+        print(f"    Playwright      : ✓ Chromium v{_pw_ok.version} (Google Fonts reales)")
     else:
-        print("  [HTML] Playwright no disponible — fallback PIL activo")
+        print(f"    Playwright      : ✗ no disponible — usando fuentes del sistema (PIL)")
 
-    print("="*50)
-    print("\n  Abre en el navegador: http://localhost:5000")
+    print("\n" + "="*52)
+    print("  Abre en el navegador: http://localhost:5001")
     print("  Ctrl+C para detener\n")
-    app.run(debug=False, port=5000, threaded=False)
+    app.run(debug=False, port=5001, threaded=False)

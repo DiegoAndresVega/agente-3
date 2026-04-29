@@ -53,7 +53,6 @@ def find_local_font(family: str, weight: int = 700) -> Path | None:
         for ext in ["ttf", "otf"]:
             p = FONTS_DIR / f"{name}.{ext}"
             if p.exists():
-                print(f"  [fonts] Fuente local: {p.name}")
                 return p
     return None
 
@@ -137,7 +136,6 @@ def get_font_path(family: str | None, weight: int = 700) -> Path | None:
 
     dest = _cache_path(family, weight)
     if dest.exists():
-        print(f"  [fonts] Usando caché: {dest.name}")
         return dest
 
     # Si esta familia ya falló en Google Fonts en esta sesión, no reintentar
