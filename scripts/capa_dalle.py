@@ -204,7 +204,10 @@ def _derive_pil_seed(concepto: dict) -> int:
 
 def _fondo_concepto(color_fallback: str, w: int, h: int, concepto: dict | None) -> Image.Image:
     """
-    Selecciona aleatoriamente un generador PIL de un pool de 13+ opciones.
+    Selecciona un generador PIL según bg_tone.
+    - light: fondos claros con carácter de marca
+    - mid:   colores de marca a PLENA saturación (sin oscurecer)
+    - dark:  fondos de baja luminancia con tinte de marca
     Seed único por run+marca garantiza fondos distintos en cada ejecución.
     """
     if concepto is None:
@@ -215,34 +218,58 @@ def _fondo_concepto(color_fallback: str, w: int, h: int, concepto: dict | None) 
     acc        = (concepto.get("_accent") or "").strip()
     ext_colors = concepto.get("_colors_extended", [])
     seed       = _derive_pil_seed(concepto)
+    palette    = [c for c in [color_fallback, sec, acc] + list(ext_colors) if c]
+    palette    = list(dict.fromkeys(palette))[:5]
+    rng        = np.random.default_rng(seed)
+    pid        = concepto.get("proposal_id", "?")
 
     if bg_tone == "light":
-        return Image.new("RGBA", (w, h), (245, 244, 242, 255))
-
-    # Paleta completa de marca (hasta 5 colores únicos)
-    palette = [c for c in [color_fallback, sec, acc] + list(ext_colors) if c]
-    palette = list(dict.fromkeys(palette))[:5]
-
-    rng = np.random.default_rng(seed)
-
-    # Pool de generadores oscuros — todos producen fondos de baja luminancia
-    generators = [
-        lambda: _fondo_oscuro_cinematico(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_marca_pura(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_geometrico_bold(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_radial_impacto(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_diagonal_marca(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_mesh_gradient(palette, w, h, seed=seed),
-        lambda: _fondo_ondas(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_manchas(color_fallback, sec, acc, w, h, seed=seed),
-        lambda: _fondo_constructivista(color_fallback, sec, acc, w, h, seed=seed),
-        lambda: _fondo_duotono(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_espiral(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_neblina_capas(color_fallback, sec or acc, w, h, seed=seed),
-        lambda: _fondo_diagonal_multicolor(palette, w, h, seed=seed),
-    ]
+        generators = [
+            lambda: _fondo_editorial(color_fallback, w, h, is_minimal=False, seed=seed),
+            lambda: _fondo_editorial(color_fallback, w, h, is_minimal=True, seed=seed),
+            lambda: _fondo_papel_bold(color_fallback, w, h, seed=seed),
+            lambda: _fondo_secciones_bold(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_banda_light(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_tint_light(color_fallback, w, h, seed=seed),
+            lambda: _fondo_lineas_marca(color_fallback, w, h, seed=seed),
+        ]
+    elif bg_tone == "mid":
+        # Colores de marca a plena saturación — sin multiplicadores de oscurecimiento
+        generators = [
+            lambda: _fondo_gran_bloque_marca(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_gradiente_lineal(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_split_vertical(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_diagonal_brillante(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_arcos_concentric(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_chevron(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_franjas_marca(palette, w, h, seed=seed),
+            lambda: _fondo_halftone(color_fallback, w, h, seed=seed),
+            lambda: _fondo_blob_vibrante(color_fallback, sec, acc, w, h, seed=seed),
+            lambda: _fondo_campos_color(palette, w, h, seed=seed),
+            lambda: _fondo_marca_pura(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_secciones_bold(color_fallback, sec or acc, w, h, seed=seed),
+        ]
+    else:  # dark
+        generators = [
+            lambda: _fondo_oscuro_cinematico(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_marca_pura(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_geometrico_bold(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_radial_impacto(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_diagonal_marca(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_mesh_gradient(palette, w, h, seed=seed),
+            lambda: _fondo_ondas(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_manchas(color_fallback, sec, acc, w, h, seed=seed),
+            lambda: _fondo_constructivista(color_fallback, sec, acc, w, h, seed=seed),
+            lambda: _fondo_duotono(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_espiral(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_neblina_capas(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_diagonal_multicolor(palette, w, h, seed=seed),
+            lambda: _fondo_scan_lines(color_fallback, sec or acc, w, h, seed=seed),
+            lambda: _fondo_angular_dark(color_fallback, sec or acc, w, h, seed=seed),
+        ]
 
     idx = int(rng.integers(0, len(generators)))
+    print(f"  [PIL] P{pid} bg={bg_tone} → gen#{idx}/{len(generators)}")
     try:
         return generators[idx]()
     except Exception as e:
@@ -879,6 +906,444 @@ def _fondo_diagonal_multicolor(colors: list[str], w: int, h: int, seed: int = 0)
         arr[mask, 2] = cb
     arr[:, :, 3] = 255
     return Image.fromarray(arr, "RGBA")
+
+
+# ─── Generadores MID — colores de marca a plena saturación ───────────────────
+
+def _fondo_gran_bloque_marca(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Gran bloque del primario a plena saturación (sin oscurecer) sobre base blanca/crema.
+    Modo varía con seed: banda superior, bloque izquierdo, diagonal.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    cream = int(rng.uniform(246, 252))
+    arr = np.full((h, w, 4), cream, dtype=np.uint8)
+    arr[:, :, 3] = 255
+
+    mode = seed % 3
+    if mode == 0:
+        split = int(h * rng.uniform(0.55, 0.70))
+        arr[:split, :, 0] = r; arr[:split, :, 1] = g; arr[:split, :, 2] = b
+    elif mode == 1:
+        split = int(w * rng.uniform(0.50, 0.62))
+        arr[:, :split, 0] = r; arr[:, :split, 1] = g; arr[:, :split, 2] = b
+    else:
+        ys_i = np.linspace(0.0, 1.0, h, dtype=np.float32)
+        xs_i = np.linspace(0.0, 1.0, w, dtype=np.float32)
+        yy_i, xx_i = np.meshgrid(ys_i, xs_i, indexing="ij")
+        sy = rng.uniform(0.50, 0.70)
+        sx = rng.uniform(0.50, 0.70)
+        mask = (yy_i / sy + xx_i / sx) < 1.0
+        arr[mask, 0] = r; arr[mask, 1] = g; arr[mask, 2] = b
+
+    if secondary_hex:
+        sr, sg, sb = _hex_rgb(secondary_hex)
+        img = Image.fromarray(arr, "RGBA")
+        ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        thick = max(4, int(h * 0.012))
+        ly = int(h * rng.uniform(0.72, 0.82))
+        od.rectangle([int(w * 0.07), ly, int(w * 0.93), ly + thick], fill=(sr, sg, sb, 220))
+        return Image.alpha_composite(img, ov)
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_gradiente_lineal(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Gradiente lineal entre primario y secundario a PLENA saturación.
+    Dirección varía con seed: vertical, horizontal, diagonal.
+    """
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    if secondary_hex:
+        r2, g2, b2 = _hex_rgb(secondary_hex)
+    else:
+        r2 = min(255, int(r1 + (255 - r1) * 0.50))
+        g2 = min(255, int(g1 + (255 - g1) * 0.50))
+        b2 = min(255, int(b1 + (255 - b1) * 0.50))
+
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float32)
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")
+    mode = seed % 3
+    if mode == 0:
+        t = yy
+    elif mode == 1:
+        t = xx
+    else:
+        t = (yy + xx) / 2.0
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = np.clip(r1 * (1 - t) + r2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 1] = np.clip(g1 * (1 - t) + g2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 2] = np.clip(b1 * (1 - t) + b2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_split_vertical(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Split vertical: izquierda = secundario o blanco, derecha = primario a plena saturación.
+    Gradiente suave en la unión (6% de blend).
+    """
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    if secondary_hex:
+        r2, g2, b2 = _hex_rgb(secondary_hex)
+    else:
+        r2, g2, b2 = 248, 248, 248
+
+    split = rng.uniform(0.42, 0.58)
+    blend_w = 0.06
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
+    t = np.clip((xs - split + blend_w / 2) / blend_w, 0.0, 1.0)
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = np.clip(r2 * (1 - t) + r1 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 1] = np.clip(g2 * (1 - t) + g1 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 2] = np.clip(b2 * (1 - t) + b1 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_diagonal_brillante(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Split diagonal limpio sin oscurecer — primario y secundario a plena saturación.
+    Ángulo y posición de la diagonal varían con seed.
+    """
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    if secondary_hex:
+        r2, g2, b2 = _hex_rgb(secondary_hex)
+    else:
+        r2, g2, b2 = 250, 250, 250
+
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float32)
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")
+    tilt = rng.uniform(0.6, 1.4)
+    offset = rng.uniform(0.35, 0.65)
+    proj = (yy + xx * tilt) / (1 + tilt)
+    blend_w = 0.04
+    t = np.clip((proj - offset + blend_w / 2) / blend_w, 0.0, 1.0)
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = np.clip(r1 * (1 - t) + r2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 1] = np.clip(g1 * (1 - t) + g2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 2] = np.clip(b1 * (1 - t) + b2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_arcos_concentric(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Arcos concéntricos desde una esquina — alterna primario y secundario a plena saturación.
+    Origen varía entre las 4 esquinas según seed.
+    """
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    if secondary_hex:
+        r2, g2, b2 = _hex_rgb(secondary_hex)
+    else:
+        r2, g2, b2 = 248, 248, 248
+
+    corners = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+    ox, oy = corners[seed % 4]
+
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float32)
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")
+    dist = np.sqrt((xx - ox) ** 2 + (yy - oy) ** 2) / 1.42
+    n_rings = 5 + (seed % 3)
+    t = (dist * n_rings) % 1.0
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = np.clip(r1 * (1 - t) + r2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 1] = np.clip(g1 * (1 - t) + g2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 2] = np.clip(b1 * (1 - t) + b2 * t, 0, 255).astype(np.uint8)
+    arr[:, :, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_chevron(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Gran cuña/flecha del secundario sobre base primaria — ambos a plena saturación.
+    """
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    if secondary_hex:
+        sr, sg, sb = _hex_rgb(secondary_hex)
+    else:
+        sr = min(255, r1 + 60); sg = min(255, g1 + 60); sb = min(255, b1 + 60)
+
+    img = Image.new("RGBA", (w, h), (r1, g1, b1, 255))
+    ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    od = ImageDraw.Draw(ov)
+    tip_x = int(w * rng.uniform(0.45, 0.65))
+    pts = [(0, 0), (tip_x, int(h * 0.50)), (0, h)]
+    od.polygon(pts, fill=(sr, sg, sb, 210))
+    tip2 = int(tip_x * rng.uniform(0.50, 0.72))
+    pts2 = [(0, int(h * 0.18)), (tip2, int(h * 0.50)), (0, int(h * 0.82))]
+    od.polygon(pts2, fill=(r1, g1, b1, 200))
+    return Image.alpha_composite(img, ov)
+
+
+def _fondo_franjas_marca(colors: list[str], w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Franjas horizontales de los colores de marca a plena saturación.
+    Estilo cartel gráfico — alturas variables, intercaladas con blanco/crema si faltan colores.
+    """
+    rng = np.random.default_rng(seed)
+    valid = [c for c in colors if c]
+    if not valid:
+        valid = ["#888888"]
+    palette = (valid + ["#F2F2F0"])[:4]
+    n_stripes = len(palette)
+    weights = rng.dirichlet(np.ones(n_stripes) * 2.0)
+    heights = (weights * h).astype(int)
+    heights[-1] = h - heights[:-1].sum()
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 3] = 255
+    y = 0
+    for sh, col in zip(heights, palette):
+        cr, cg, cb = _hex_rgb(col)
+        arr[y:y + sh, :, 0] = cr
+        arr[y:y + sh, :, 1] = cg
+        arr[y:y + sh, :, 2] = cb
+        y += sh
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_halftone(primary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Patrón halftone: puntos del color primario sobre base blanca.
+    Radio decrece desde el centro hacia los bordes — efecto viñeta invertida.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    base = Image.new("RGBA", (w, h), (252, 252, 250, 255))
+    ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(ov)
+    spacing = max(18, int(min(w, h) * rng.uniform(0.032, 0.048)))
+    max_radius = int(spacing * rng.uniform(0.38, 0.46))
+    for gy in range(spacing // 2, h + spacing, spacing):
+        for gx in range(spacing // 2, w + spacing, spacing):
+            dist_c = np.sqrt(((gx / w) - 0.5) ** 2 + ((gy / h) - 0.5) ** 2) / 0.71
+            radius = max(2, int(max_radius * (1.2 - dist_c * 0.7)))
+            draw.ellipse([gx - radius, gy - radius, gx + radius, gy + radius],
+                         fill=(r, g, b, 200))
+    return Image.alpha_composite(base, ov)
+
+
+def _fondo_blob_vibrante(primary_hex: str, secondary_hex: str, accent_hex: str,
+                          w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Manchas/blobs orgánicas a PLENA saturación sobre base clara.
+    A diferencia de _fondo_manchas, no oscurece los colores de marca.
+    """
+    rng = np.random.default_rng(seed)
+    r1, g1, b1 = _hex_rgb(primary_hex)
+    base_r = min(255, 244 + int(r1 * 0.04))
+    base_g = min(255, 244 + int(g1 * 0.04))
+    base_b = min(255, 244 + int(b1 * 0.04))
+    img = Image.new("RGBA", (w, h), (base_r, base_g, base_b, 255))
+    colors = [c for c in [primary_hex, secondary_hex, accent_hex] if c]
+    n_blobs = int(rng.integers(4, 8))
+    for i in range(n_blobs):
+        col_hex = colors[i % len(colors)]
+        cr, cg, cb = _hex_rgb(col_hex)
+        cx = int(rng.uniform(-0.10, 1.10) * w)
+        cy = int(rng.uniform(-0.10, 1.10) * h)
+        rx = int(rng.uniform(0.15, 0.45) * w)
+        ry = int(rng.uniform(0.18, 0.50) * h)
+        opacity = int(rng.integers(85, 150))
+        blob = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        bd = ImageDraw.Draw(blob)
+        bd.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=(cr, cg, cb, opacity))
+        img = Image.alpha_composite(img, blob)
+    return img
+
+
+def _fondo_campos_color(colors: list[str], w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Campos rectangulares de color estilo Mondrian/Rothko.
+    Colores de marca puros en cada zona, zonas blancas como separación.
+    """
+    rng = np.random.default_rng(seed)
+    valid = [c for c in colors if c]
+    if not valid:
+        valid = ["#888888"]
+    palette = valid + ["#F2F2F0"]
+    img = Image.new("RGBA", (w, h), (242, 242, 240, 255))
+    draw = ImageDraw.Draw(img)
+    n_rows = 2 + (seed % 2)
+    row_splits = [0]
+    step = h / n_rows
+    for i in range(1, n_rows):
+        row_splits.append(int(step * i + rng.uniform(-step * 0.15, step * 0.15)))
+    row_splits.append(h)
+    col_split = int(w * rng.uniform(0.38, 0.62))
+    col_splits = [0, col_split, w]
+    color_idx = 0
+    for r_idx in range(len(row_splits) - 1):
+        for c_idx in range(len(col_splits) - 1):
+            col = palette[color_idx % len(palette)]
+            cr, cg, cb = _hex_rgb(col)
+            draw.rectangle(
+                [col_splits[c_idx], row_splits[r_idx], col_splits[c_idx + 1], row_splits[r_idx + 1]],
+                fill=(cr, cg, cb, 255)
+            )
+            color_idx += 1
+    return img
+
+
+# ─── Generadores LIGHT — base clara con carácter de marca ─────────────────────
+
+def _fondo_banda_light(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Fondo blanco/crema con una banda ancha del color primario a plena saturación.
+    La banda puede ser horizontal, diagonal o vertical — varía con seed.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    base = int(rng.uniform(248, 254))
+    arr = np.full((h, w, 4), base, dtype=np.uint8)
+    arr[:, :, 3] = 255
+    img = Image.fromarray(arr, "RGBA")
+    ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    od = ImageDraw.Draw(ov)
+    mode = seed % 3
+    if mode == 0:
+        band_start = int(h * rng.uniform(0.35, 0.55))
+        band_end = int(band_start + h * rng.uniform(0.14, 0.24))
+        od.rectangle([0, band_start, w, band_end], fill=(r, g, b, 255))
+    elif mode == 1:
+        slant = int(h * rng.uniform(0.25, 0.45))
+        bw = int(w * rng.uniform(0.60, 0.80))
+        x0 = int(w * rng.uniform(0.05, 0.20))
+        pts = [(x0, 0), (x0 + bw, 0), (x0 + bw - slant, h), (x0 - slant, h)]
+        od.polygon(pts, fill=(r, g, b, 255))
+    else:
+        band_start = int(w * rng.uniform(0.35, 0.55))
+        band_end = int(band_start + w * rng.uniform(0.14, 0.24))
+        od.rectangle([band_start, 0, band_end, h], fill=(r, g, b, 255))
+    return Image.alpha_composite(img, ov)
+
+
+def _fondo_tint_light(primary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Fondo blanco con gradiente muy suave de tinte del primario (8-15% de mezcla).
+    Un lado ligeramente tintado, el otro casi blanco puro.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float32)
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float32)
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")
+    mode = seed % 4
+    if mode == 0:
+        t = yy
+    elif mode == 1:
+        t = 1 - yy
+    elif mode == 2:
+        t = xx
+    else:
+        t = (yy + xx) / 2.0
+    max_tint = rng.uniform(0.08, 0.15)
+    white = 252.0
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = np.clip(white * (1 - t * max_tint) + r * (t * max_tint), 0, 255).astype(np.uint8)
+    arr[:, :, 1] = np.clip(white * (1 - t * max_tint) + g * (t * max_tint), 0, 255).astype(np.uint8)
+    arr[:, :, 2] = np.clip(white * (1 - t * max_tint) + b * (t * max_tint), 0, 255).astype(np.uint8)
+    arr[:, :, 3] = 255
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_lineas_marca(primary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Líneas finas diagonales en el color primario sobre fondo blanco.
+    Espaciado, grosor y ángulo varían con seed.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    img = Image.new("RGBA", (w, h), (252, 252, 250, 255))
+    draw = ImageDraw.Draw(img)
+    spacing = int(min(w, h) * rng.uniform(0.040, 0.065))
+    thickness = max(1, int(spacing * 0.08))
+    angle_tan = rng.uniform(0.5, 1.5)
+    opacity = int(rng.uniform(35, 65))
+    n_lines = int((w + h) / max(spacing, 1)) + 4
+    for i in range(-2, n_lines):
+        x0 = i * spacing
+        x1 = x0 - int(h * angle_tan)
+        draw.line([(x0, 0), (x1, h)], fill=(r, g, b, opacity), width=thickness)
+    return img
+
+
+# ─── Generadores DARK adicionales ─────────────────────────────────────────────
+
+def _fondo_scan_lines(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Base muy oscura del primario con líneas horizontales finas del secundario.
+    Efecto display/pantalla premium — fade vertical sutil.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    dark = rng.uniform(0.08, 0.15)
+    if secondary_hex:
+        sr, sg, sb = _hex_rgb(secondary_hex)
+    else:
+        sr = min(255, int(r + (255 - r) * 0.50))
+        sg = min(255, int(g + (255 - g) * 0.50))
+        sb = min(255, int(b + (255 - b) * 0.50))
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = int(r * dark); arr[:, :, 1] = int(g * dark); arr[:, :, 2] = int(b * dark)
+    arr[:, :, 3] = 255
+    spacing = max(4, int(h * rng.uniform(0.015, 0.030)))
+    line_bright = rng.uniform(0.20, 0.35)
+    for y in range(0, h, spacing):
+        arr[y, :, 0] = int(sr * line_bright)
+        arr[y, :, 1] = int(sg * line_bright)
+        arr[y, :, 2] = int(sb * line_bright)
+    fade = np.linspace(1.0, 0.70, h, dtype=np.float32)
+    for ci in range(3):
+        arr[:, :, ci] = np.clip(arr[:, :, ci].astype(np.float32) * fade[:, None], 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGBA")
+
+
+def _fondo_angular_dark(primary_hex: str, secondary_hex: str, w: int, h: int, seed: int = 0) -> Image.Image:
+    """
+    Base muy oscura con 2-3 formas triangulares semitransparentes del secundario.
+    Composición angular dinámica — posiciones aleatorias por seed.
+    """
+    r, g, b = _hex_rgb(primary_hex)
+    rng = np.random.default_rng(seed)
+    dark = rng.uniform(0.06, 0.11)
+    if secondary_hex:
+        sr, sg, sb = _hex_rgb(secondary_hex)
+    else:
+        sr = min(255, int(r + (255 - r) * 0.40))
+        sg = min(255, int(g + (255 - g) * 0.40))
+        sb = min(255, int(b + (255 - b) * 0.40))
+
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    arr[:, :, 0] = int(r * dark); arr[:, :, 1] = int(g * dark); arr[:, :, 2] = int(b * dark)
+    arr[:, :, 3] = 255
+    img = Image.fromarray(arr, "RGBA")
+    n_shapes = int(rng.integers(2, 4))
+    for _ in range(n_shapes):
+        ov = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        pts = [
+            (int(rng.uniform(-0.1, 1.1) * w), int(rng.uniform(-0.1, 1.1) * h)),
+            (int(rng.uniform(-0.1, 1.1) * w), int(rng.uniform(-0.1, 1.1) * h)),
+            (int(rng.uniform(-0.1, 1.1) * w), int(rng.uniform(-0.1, 1.1) * h)),
+        ]
+        opacity = int(rng.integers(30, 65))
+        od.polygon(pts, fill=(sr, sg, sb, opacity))
+        img = Image.alpha_composite(img, ov)
+    return img
 
 
 def _fondo_solido(hex_color: str, w: int, h: int) -> Image.Image:
