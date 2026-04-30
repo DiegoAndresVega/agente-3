@@ -591,6 +591,8 @@ def _normalizar_color_hex(c) -> str | None:
     h = c.lstrip("#").upper()
     if len(h) == 3 and all(ch in "0123456789ABCDEF" for ch in h):
         h = h[0]*2 + h[1]*2 + h[2]*2
+    if len(h) == 8 and all(ch in "0123456789ABCDEF" for ch in h):
+        h = h[:6]  # RRGGBBAA → descartar canal alpha
     if len(h) == 6 and all(ch in "0123456789ABCDEF" for ch in h):
         return f"#{h}"
     return None
@@ -866,9 +868,11 @@ def normalizar_pedido(pedido: dict,
             elif _fc_blancos:
                 print(f"    Blancos incluidos (pocos saturados — pueden ser parte de la marca): {_fc_blancos}")
 
+            _fc_logo_confirmed = bool(_normalizar_color_hex(_fc.get("logo_color", "")))
             if _fc_cols:
                 brand_context["canonical_palette"]         = _fc_cols
                 brand_context["_fc_saturated_count"]       = _n_saturados
+                brand_context["_fc_logo_confirmed"]        = _fc_logo_confirmed
                 brand_context["firecrawl_fonts"]           = {
                     "heading": _fc.get("font_heading", ""),
                     "body":    _fc.get("font_body", ""),

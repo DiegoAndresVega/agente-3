@@ -196,11 +196,46 @@ HTML_FORM = """
     .mockup-info { padding: 8px 10px; }
     .mockup-info h3 { font-size: 0.78rem; font-weight: 600; margin-bottom: 2px; }
     .mockup-info p { font-size: 0.68rem; color: #666; line-height: 1.3; }
-    .colores { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
-    .color-chip {
-      width: 20px; height: 20px; border-radius: 50%;
-      border: 1px solid rgba(0,0,0,0.1);
+    .colores { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .color-swatch {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
+    .color-swatch .dot {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 1.5px solid rgba(0,0,0,0.12);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .color-swatch .hex {
+      font-size: 0.60rem; color: #777; font-family: monospace; letter-spacing: -0.02em;
+    }
+    .palette-analisis { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+    .palette-analisis .color-swatch .dot { width: 28px; height: 28px; }
+    .palette-analisis .color-swatch .hex { font-size: 0.65rem; }
+    .btn-ampliar {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      width: 100%; padding: 7px 12px; margin-top: 8px;
+      background: #f5f5f0; border: 1.5px solid #ddd; border-radius: 6px;
+      font-size: 0.80rem; font-weight: 500; color: #444; cursor: pointer;
+      transition: all .18s;
+    }
+    .btn-ampliar:hover { background: #333; color: #fff; border-color: #333; }
+    /* Modal lightbox */
+    .img-modal {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.88); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+    }
+    .img-modal.open { display: flex; }
+    .img-modal img {
+      max-width: 90vw; max-height: 90vh; border-radius: 8px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6); object-fit: contain;
+    }
+    .img-modal-close {
+      position: fixed; top: 20px; right: 24px; font-size: 2rem;
+      color: #fff; cursor: pointer; line-height: 1; opacity: 0.8;
+      background: none; border: none; z-index: 10000;
+    }
+    .img-modal-close:hover { opacity: 1; }
     .razonamiento {
       background: #fffdf0; border-left: 3px solid #f0c040;
       padding: 14px 18px; border-radius: 0 8px 8px 0;
@@ -473,38 +508,53 @@ HTML_FORM = """
   let _jobId = null;
   let _lastFormData = null;
 
+  function _swatches(colors) {
+    return (colors || []).filter(c => c && c.startsWith('#')).map(c =>
+      `<div class="color-swatch">
+         <div class="dot" style="background:${c}" title="${c}"></div>
+         <span class="hex">${c.toUpperCase()}</span>
+       </div>`
+    ).join('');
+  }
+
   function mostrarResultados(data) {
     _mockupsData = data.mockups;
     _jobId = data.job_id;
 
     const analisis = data.analisis_marca;
+    const swatchesAnalisis = _swatches(analisis.colores_principales);
     document.getElementById('analisis_texto').innerHTML =
       `<strong>Empresa:</strong> ${analisis.descripcion_empresa}<br>
        <strong>Personalidad de marca:</strong> ${analisis.personalidad_marca}<br>
        <strong>Estilo recomendado:</strong> ${analisis.estilo_recomendado}<br>
-       <strong>Colores detectados:</strong> ${analisis.colores_detectados.join(', ')}`;
+       <strong>Colores de marca:</strong>
+       <div class="palette-analisis">${swatchesAnalisis}</div>`;
 
     const grid = document.getElementById('mockups_grid');
     grid.innerHTML = '';
+    window._imgSrcs = [];
     data.mockups.forEach((m, i) => {
+      const imgSrc = `data:image/jpeg;base64,${m.imagen_b64}`;
+      window._imgSrcs.push(imgSrc);
       const nombreArchivo = m.nombre.replace(/[^a-zA-Z0-9_-]/g, '_') + '.jpg';
       const btnId = `btn_mg_${i}`;
+      const swatches = _swatches(m.palette && m.palette.length ? m.palette : [m.color_primario, m.color_secundario]);
       grid.innerHTML += `
         <div class="mockup-card">
-          <img src="data:image/jpeg;base64,${m.imagen_b64}" alt="${m.nombre}">
+          <img src="${imgSrc}" alt="${m.nombre}" style="cursor:zoom-in"
+               onclick="abrirImagen(${i})">
           <div class="mockup-info">
             <h3>${m.nombre}</h3>
             <p>${m.concepto}</p>
-            <div class="colores">
-              <div class="color-chip" style="background:${m.color_primario}" title="${m.color_primario}"></div>
-              <div class="color-chip" style="background:${m.color_secundario}" title="${m.color_secundario}"></div>
-              <span style="font-size:0.75rem;color:#999">${m.color_primario} · ${m.color_secundario}</span>
-            </div>
+            <div class="colores">${swatches}</div>
+            <button class="btn-ampliar" onclick="abrirImagen(${i})">
+              &#128269; Ampliar imagen
+            </button>
             <button class="btn-megusta" id="${btnId}"
                     onclick="meGusta(this, '${data.job_id}', ${m.proposal_id})">
               👍 Este diseño me gusta
             </button>
-            <a class="btn-download" href="data:image/jpeg;base64,${m.imagen_b64}"
+            <a class="btn-download" href="${imgSrc}"
                download="${nombreArchivo}">
               ⬇ Descargar propuesta ${i + 1}
             </a>
@@ -589,6 +639,30 @@ HTML_FORM = """
     document.getElementById('btn_submit').textContent = 'Generar diseño con IA →';
   }
 </script>
+
+<!-- Modal lightbox — debe estar ANTES del script de inicialización -->
+<div class="img-modal" id="img-modal">
+  <button class="img-modal-close" id="img-modal-close">&#x2715;</button>
+  <img id="img-modal-img" src="" alt="Diseño ampliado">
+</div>
+
+<script>
+  // Array global de src — onclick usa índice en lugar de incrustar base64 en atributos
+  window._imgSrcs = [];
+
+  window.abrirImagen = function(idx) {
+    const src = window._imgSrcs[idx];
+    if (!src) return;
+    document.getElementById('img-modal-img').src = src;
+    document.getElementById('img-modal').classList.add('open');
+  };
+
+  (function() {
+    const modal = document.getElementById('img-modal');
+    document.getElementById('img-modal-close').onclick = () => modal.classList.remove('open');
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.remove('open'); });
+  })();
 </body>
 </html>
 """
@@ -793,23 +867,34 @@ def generar():
             mockup_img.save(str(out_path), quality=95)
 
             img_b64 = base64.b64encode(out_path.read_bytes()).decode("utf-8")
-            overlay = concepto.get("color_overlay", {})
+            _prim = concepto.get("_primary", "") or concepto.get("color_overlay", {}).get("color", "#333")
+            _sec  = concepto.get("_secondary", "")
+            _acc  = concepto.get("_accent", "")
+            _ext  = concepto.get("_colors_extended", [])
+            _pal  = [c for c in [_prim, _sec, _acc] + list(_ext) if c and len(c) == 7 and c.startswith("#")]
+            _pal  = list(dict.fromkeys(_pal))[:5]
             mockups.append({
                 "proposal_id":      pid,
                 "nombre":           nombre,
                 "concepto":         concepto.get("design_rationale", ""),
-                "color_primario":   overlay.get("color", "#333"),
-                "color_secundario": concepto.get("logo", {}).get("treatment") == "blanco" and "#fff" or "#333",
+                "color_primario":   _prim,
+                "color_secundario": _sec,
+                "palette":          _pal,
                 "imagen_b64":       img_b64,
             })
 
         analisis = spec.get("brand_analysis", {})
+        _cp = brand_context.get("canonical_palette") or []
+        if not _cp:
+            _cd = analisis.get("colors", {})
+            _cp = [_cd.get("primary", ""), _cd.get("secondary", ""), _cd.get("accent", "")]
+            _cp = [c for c in _cp if c and len(c) == 7 and c.startswith("#")]
         return jsonify({
             "job_id": job_id,
             "analisis_marca": {
                 "descripcion_empresa": analisis.get("brand_name", "—"),
                 "personalidad_marca":  analisis.get("brand_tone", "—"),
-                "colores_detectados":  list(analisis.get("colors", {}).values()),
+                "colores_principales": _cp,
                 "estilo_recomendado":  analisis.get("visual_density", "—"),
             },
             "razonamiento": (spec.get("design_concepts") or [{}])[0].get("design_rationale", "—"),

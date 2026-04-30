@@ -21,6 +21,7 @@ import base64
 
 import anthropic
 
+from scripts.capa0_normalizer import _consolidar_colores_hsv as _consolidar_hsv
 from scripts.config import (
     MODEL_BRAND_ANALYSIS, TEMP_BRAND_ANALYSIS,
     MODEL_DESIGN_CONCEPTS, TEMP_DESIGN_CONCEPTS,
@@ -1457,22 +1458,61 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
     print(f"{'─'*50}")
 
     # ── Color Oracle: paleta canónica antes del análisis completo ────────────────
-    # Prioridad: (1) Firecrawl ya estableció canonical_palette en capa0 → saltar Oracle
-    #            (2) Brandbook PDF disponible → saltar Oracle (extrae del PDF)
-    #            (3) Solo web/logo → correr Oracle (Haiku, temp=0)
+    # Prioridad:
+    #   (1) Brandbook PDF → skip Oracle
+    #   (2) Firecrawl confirmó logo_color + ≥1 saturado → skip Oracle
+    #       El logo es la fuente más fiable; añadir secundarios del screenshot introduce ruido.
+    #   (3) Firecrawl encontró 2+ colores sin logo confirmado → Oracle valida el primario
+    #       Si el primario de Oracle difiere >40° del de Firecrawl, Oracle gana.
+    #   (4) Firecrawl insuficiente o sin URL → Oracle como fuente principal
     _tiene_brandbook    = bool(brand_context.get("pdf_resumen"))
     _fc_saturated_count = brand_context.get("_fc_saturated_count", 0)
-    # Firecrawl suficiente = 2+ colores saturados (no blancos). Es la fuente primaria.
-    # El Color Oracle actúa solo como fallback cuando Firecrawl es insuficiente.
+    _fc_logo_confirmed  = brand_context.get("_fc_logo_confirmed", False)
     _tiene_firecrawl    = bool(brand_context.get("canonical_palette")) and _fc_saturated_count >= 2
+
+    def _hue_dist(h1: str, h2: str) -> float:
+        import colorsys
+        def _hue(h):
+            try:
+                r, g, b = int(h[1:3], 16)/255, int(h[3:5], 16)/255, int(h[5:7], 16)/255
+                return colorsys.rgb_to_hsv(r, g, b)[0]
+            except Exception:
+                return 0.0
+        d = abs(_hue(h1) - _hue(h2))
+        return min(d, 1.0 - d)
 
     if _tiene_brandbook:
         brand_context["canonical_palette"] = []
         print("  → Brandbook disponible — Color Oracle omitido")
+
+    elif _fc_logo_confirmed and _fc_saturated_count >= 1:
+        # Logo confirmado por Firecrawl: el primario es fiable.
+        # No buscamos secundarios adicionales — screenshots con anuncios o banners
+        # de temporada producen colores que no son de identidad de marca.
+        print(f"\n[0.5] Color Oracle: omitido — logo_color confirmado por Firecrawl: {brand_context['canonical_palette']}")
+
     elif _tiene_firecrawl:
-        print(f"\n[0.5] Color Oracle: omitido — Firecrawl identificó {_fc_saturated_count} colores: {brand_context['canonical_palette']}")
+        # Firecrawl 2+ colores pero sin logo_color confirmado → Oracle valida el primario
+        _tiene_logo = bool(brand_context.get("logo_path"))
+        if _tiene_logo:
+            print(f"\n[0.5] Color Oracle (validador) — verificando primario de Firecrawl contra logo...")
+            _canon_val = _llamada_color_oracle(brand_context)
+            if _canon_val:
+                _fc_primary  = brand_context["canonical_palette"][0]
+                _ora_primary = _canon_val[0]
+                _dist = _hue_dist(_fc_primary, _ora_primary)
+                if _dist > 0.11:  # >40° → el primario de Firecrawl es dudoso, Oracle corrige
+                    brand_context["canonical_palette"] = _consolidar_hsv(_canon_val, max_grupos=3)
+                    print(f"  [Oracle] Primario Firecrawl={_fc_primary} difiere del logo ({_ora_primary}, Δ={_dist:.2f}) → Oracle gana")
+                else:
+                    print(f"  [Oracle] Primario confirmado: {_fc_primary} ≈ {_ora_primary} (Δ={_dist:.2f}) → Firecrawl respetado")
+            else:
+                print(f"  [Oracle] Sin resultado — Firecrawl respetado: {brand_context['canonical_palette']}")
+        else:
+            print(f"\n[0.5] Color Oracle: omitido — Firecrawl identificó {_fc_saturated_count} colores (sin logo): {brand_context['canonical_palette']}")
+
     else:
-        # Firecrawl insuficiente o sin URL → Oracle como fallback
+        # Firecrawl insuficiente o sin URL → Oracle como fuente principal
         if brand_context.get("canonical_palette"):
             print(f"\n[0.5] Color Oracle (Haiku) — Firecrawl insuficiente ({_fc_saturated_count} saturados), completando...")
         else:
@@ -1480,12 +1520,13 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
         _canon = _llamada_color_oracle(brand_context)
         _fc_existente = brand_context.get("canonical_palette", [])
         if _fc_existente and _canon:
-            _merged = _fc_existente + [c for c in _canon if c not in _fc_existente]
-            brand_context["canonical_palette"] = _merged[:3]
-            print(f"  → Paleta completada (Firecrawl + Oracle): {_merged[:3]}")
+            _raw_merged = _fc_existente + [c for c in _canon if c not in _fc_existente]
+            _merged = _consolidar_hsv(_raw_merged, max_grupos=3)
+            brand_context["canonical_palette"] = _merged
+            print(f"  → Paleta completada (Firecrawl + Oracle): {_merged}")
         elif _canon:
-            brand_context["canonical_palette"] = _canon
-            print(f"  → Oracle: {_canon}")
+            brand_context["canonical_palette"] = _consolidar_hsv(_canon, max_grupos=3)
+            print(f"  → Oracle: {brand_context['canonical_palette']}")
         else:
             print("  → Sin resultado — Brand Analysis usará todas las fuentes disponibles")
 
