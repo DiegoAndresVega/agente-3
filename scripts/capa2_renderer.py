@@ -385,11 +385,31 @@ def _preparar_logo(logo_path: str, treatment: str,
     logo = logo_orig.convert("RGBA")
     arr  = np.array(logo, dtype=np.float32)
 
-    # Solo eliminar fondo blanco si el logo NO tiene canal alfa propio
-    # (evita borrar elementos blancos intencionales de logos con transparencia)
+    # Eliminar fondo solo si el logo NO tiene canal alfa propio.
+    # Usa corner sampling: detecta el color de fondo real muestreando las 4 esquinas
+    # y elimina todos los píxeles similares (cubre blanco, gris, crema, cualquier fondo claro).
     if not has_alpha:
-        white = (arr[:, :, 0] > 228) & (arr[:, :, 1] > 228) & (arr[:, :, 2] > 228)
-        arr[white, 3] = 0.0
+        s = max(3, min(8, logo.width // 20, logo.height // 20))
+        corners = np.concatenate([
+            arr[:s, :s].reshape(-1, 4),
+            arr[:s, -s:].reshape(-1, 4),
+            arr[-s:, :s].reshape(-1, 4),
+            arr[-s:, -s:].reshape(-1, 4),
+        ], axis=0)
+        bg_r = np.median(corners[:, 0])
+        bg_g = np.median(corners[:, 1])
+        bg_b = np.median(corners[:, 2])
+        bg_lum = (0.299 * bg_r + 0.587 * bg_g + 0.114 * bg_b) / 255
+        # Solo eliminar si el fondo detectado es claro (no borrar logos sobre fondo oscuro)
+        if bg_lum > 0.40:
+            dist = np.sqrt(
+                (arr[:, :, 0] - bg_r) ** 2 +
+                (arr[:, :, 1] - bg_g) ** 2 +
+                (arr[:, :, 2] - bg_b) ** 2
+            )
+            # Transición suave: borde del logo → antialiasing, no corte duro
+            arr[:, :, 3] = np.where(dist < 30, 0.0,
+                           np.where(dist < 50, arr[:, :, 3] * ((dist - 30) / 20), arr[:, :, 3]))
 
     opaque = arr[:, :, 3] > 30
 
