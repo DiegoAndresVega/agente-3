@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sustain Awards · Generador de Diseño IA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,350&display=swap" rel="stylesheet">
+  <style>/* ===========================================================
+   Sustain Awards — Colors & Type
+   Source of truth: SA_Brand-Guidelines_2.0.ase + Figma file.
+   =========================================================== */
+
+:root {
+  /* ---------- BRAND PALETTE (from .ase) -------------------- */
+  --sa-black:        rgb(0, 0, 0);          /* SA Black           */
+  --sa-cool-gray-6:  rgb(160, 160, 160);    /* SA Cool Gray 6c    */
+  --sa-427c:         rgb(222, 222, 222);    /* SA 427C — hairline */
+  --sa-7534:         rgb(194, 186, 173);    /* SA 7534 — sand     */
+  --sa-436:          rgb(171, 156, 158);    /* SA 436  — clay     */
+  --sa-cool-gray-11: rgb(87, 84, 82);       /* SA Cool Gray 11C   */
+  --sa-lima:         rgb(219, 255, 10);     /* SA LIMA            */
+
+  /* ---------- NEUTRAL EXTENSIONS (from Figma usage) -------- */
+  --sa-white:        rgb(255, 255, 255);
+  --sa-off-white:    rgb(244, 244, 242);    /* page tint          */
+  --sa-mist:         rgb(250, 254, 251);    /* near-white card    */
+  --sa-line:         rgb(238, 238, 238);    /* lighter rule       */
+  --sa-divider:      rgb(222, 222, 222);    /* canonical rule     */
+  --sa-stone:        rgb(217, 217, 217);
+  --sa-ink-2:        rgb(51, 51, 51);
+  --sa-lima-tint:    rgb(244, 255, 178);    /* lima @ low alpha   */
+  --sa-green:        rgb(50, 124, 70);      /* validation/eco     */
+  --sa-green-tint:   rgb(194, 232, 197);
+
+  /* ---------- SEMANTIC TOKENS ------------------------------ */
+  --bg:              var(--sa-white);
+  --bg-alt:          var(--sa-off-white);
+  --bg-inverse:      var(--sa-black);
+  --surface:         var(--sa-white);
+  --surface-muted:   var(--sa-divider);
+
+  --fg:              var(--sa-black);
+  --fg-muted:        var(--sa-cool-gray-11);
+  --fg-subtle:       var(--sa-cool-gray-6);
+  --fg-inverse:      var(--sa-white);
+
+  --border:          var(--sa-divider);
+  --border-strong:   var(--sa-black);
+  --border-soft:     var(--sa-line);
+
+  --accent:          var(--sa-lima);        /* used SPARINGLY     */
+  --accent-soft:     var(--sa-lima-tint);
+  --eco:             var(--sa-green);
+
+  /* ---------- TYPE FAMILIES -------------------------------- */
+  --font-display:    "Cormorant Garamond", Georgia, serif;
+  --font-body:       "Jost", "Avant Garde", "Century Gothic", sans-serif;
+  --font-ui-demi:    "Jost", "Century Gothic", sans-serif;
+
+  /* ---------- TYPE SCALE (from Figma usage) ---------------- */
+  /* Display — Cormorant Garamond Regular, tight tracking, line-height ~0.9 */
+  --display-xl-size:   60px;
+  --display-xl-lh:     0.9;
+  --display-l-size:    48px;
+  --display-l-lh:      0.95;
+  --display-m-size:    32px;
+  --display-m-lh:      1.0;
+
+  /* UI titles — Jost Demi */
+  --title-l-size:      32px;
+  --title-l-lh:        0.95;
+  --title-m-size:      18px;
+  --title-m-lh:        1.0;
+
+  /* Body / labels — Jost 400 */
+  --body-l-size:       16px;
+  --body-l-lh:         1.4;
+  --body-m-size:       14px;
+  --body-m-lh:         1.4;
+  --body-s-size:       13px;
+  --body-s-lh:         1.35;
+  --label-size:        10px;
+  --label-lh:          1.1;
+
+  --tracking-tight:   -0.030em;             /* used everywhere    */
+  --tracking-flat:     0em;
+  --tracking-wide:     0.04em;
+
+  /* ---------- SPACING / LAYOUT ----------------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  40px;
+  --space-8:  48px;
+  --space-9:  64px;
+  --space-10: 80px;
+
+  --radius-0: 0px;        /* default — Sustain is square        */
+  --radius-1: 4px;
+  --radius-2: 8px;        /* card / panel radius                */
+  --radius-pill: 999px;
+
+  /* ---------- ELEVATION ------------------------------------ */
+  /* Sustain barely uses shadow — surfaces sit on hairlines.    */
+  --hairline:         1px solid var(--border);
+  --hairline-soft:    1px solid var(--border-soft);
+  --hairline-strong:  1px solid var(--border-strong);
+  --shadow-soft:      0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-pop:       0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* ---------- MOTION --------------------------------------- */
+  --ease:             cubic-bezier(.2, .6, .2, 1);
+  --dur-fast:         140ms;
+  --dur-base:         220ms;
+  --dur-slow:         400ms;
+}
+
+/* ----- Element-level resets / semantic styles ------------------ */
+html, body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--body-l-size);
+  line-height: var(--body-l-lh);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg);
+  background: var(--bg);
+}
+
+h1, .h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--display-xl-size);
+  line-height: var(--display-xl-lh);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+h2, .h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--display-l-size);
+  line-height: var(--display-l-lh);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+h3, .h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--display-m-size);
+  line-height: var(--display-m-lh);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+h4, .h4 {
+  font-family: var(--font-ui-demi);
+  font-weight: 600;
+  font-size: var(--title-m-size);
+  line-height: var(--title-m-lh);
+  letter-spacing: var(--tracking-tight);
+  margin: 0;
+}
+p, .body {
+  font-family: var(--font-body);
+  font-size: var(--body-l-size);
+  line-height: var(--body-l-lh);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: pretty;
+  margin: 0 0 var(--space-4);
+}
+small, .body-s {
+  font-family: var(--font-body);
+  font-size: var(--body-s-size);
+  line-height: var(--body-s-lh);
+  letter-spacing: var(--tracking-tight);
+}
+.label {
+  font-family: var(--font-body);
+  font-size: var(--label-size);
+  line-height: var(--label-lh);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.eyebrow {
+  font-family: var(--font-ui-demi);
+  font-weight: 600;
+  font-size: var(--body-m-size);
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+}
+em, i {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 350;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+a:hover { opacity: 0.6; }
+
+hr {
+  border: 0;
+  border-top: var(--hairline);
+  margin: var(--space-6) 0;
+}
+</style>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-body);
+      letter-spacing: -0.03em;
+      background: #fff;
+      color: #000;
+      min-height: 100vh;
+    }
+    header {
+      background: #000;
+      color: #fff;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 {
+      font-family: var(--font-ui-demi); font-weight: 700;
+      font-size: 18px; letter-spacing: -0.05em;
+    }
+    header span {
+      font-family: var(--font-body); font-size: 12px;
+      letter-spacing: -0.03em; color: #A0A0A0;
+      border: 1px solid #A0A0A0; padding: 4px 12px;
+    }
+    .container { max-width: 760px; margin: 80px auto 0; padding: 0 20px 80px; }
+    .card {
+      background: #F4F4F2;
+      border: 1px solid #DEDEDE;
+      border-radius: 8px;
+      padding: 36px;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-family: var(--font-display); font-weight: 400;
+      font-size: 28px; color: #000;
+      letter-spacing: -0.03em; line-height: 1;
+      margin-bottom: 10px;
+      display: flex; align-items: center;
+    }
+    h2 .hint {
+      font-family: var(--font-body); font-weight: 400;
+      font-size: 12px; letter-spacing: -0.03em;
+      text-transform: none; color: #A0A0A0;
+      margin-left: 6px;
+    }
+    .info {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1px solid #A0A0A0; color: #A0A0A0;
+      font-family: var(--font-body); font-size: 10px; font-weight: 500;
+      letter-spacing: 0; text-transform: none; line-height: 1;
+      margin-left: 8px; cursor: help; vertical-align: middle;
+      position: relative;
+      transition: border-color 140ms cubic-bezier(.2,.6,.2,1), color 140ms cubic-bezier(.2,.6,.2,1);
+    }
+    .info:hover { border-color: #000; color: #000; }
+    .info::after {
+      content: attr(data-tip);
+      position: absolute; left: 50%; top: calc(100% + 10px);
+      transform: translateX(-50%) translateY(-4px);
+      width: 280px; padding: 12px 14px;
+      background: #000; color: #fff;
+      font-family: var(--font-body); font-size: 12px; font-weight: 400;
+      line-height: 1.5; letter-spacing: -0.03em; text-align: left;
+      text-transform: none; border-radius: 8px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 140ms cubic-bezier(.2,.6,.2,1), transform 140ms cubic-bezier(.2,.6,.2,1);
+      z-index: 10;
+    }
+    .info::before {
+      content: ""; position: absolute; left: 50%; top: 100%;
+      transform: translateX(-50%) translateY(4px);
+      border: 5px solid transparent; border-bottom-color: #000;
+      opacity: 0; transition: opacity 140ms cubic-bezier(.2,.6,.2,1);
+      pointer-events: none; z-index: 10;
+    }
+    .info:hover::after, .info:hover::before { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .field { margin-bottom: 20px; }
+    label {
+      display: block;
+      font-family: var(--font-body); font-size: 14px;
+      font-weight: 500; color: #000;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    label .req {
+      color: #000; font-weight: 500;
+      margin-left: 2px;
+    }
+    .card-lede {
+      font-family: var(--font-body); font-size: 13px;
+      letter-spacing: -0.03em; color: #575452;
+      margin: 0 0 28px;
+      line-height: 1.55;
+    }
+    input[type="text"], input[type="url"], select {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid #DEDEDE;
+      border-radius: 8px;
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #000;
+      background: #fff;
+      transition: border-color 220ms cubic-bezier(.2,.6,.2,1);
+      outline: 0;
+    }
+    input[type="text"]:focus, input[type="url"]:focus, select:focus {
+      border-color: #000;
+    }
+    input::placeholder { color: #DEDEDE; font-weight: 300; }
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='black' stroke-width='1.5'><polyline points='1,1 6,6 11,1'/></svg>");
+      background-repeat: no-repeat; background-position: right 14px center;
+      padding-right: 32px;
+    }
+    .upload-area {
+      border: 1px dashed #DEDEDE;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 220ms cubic-bezier(.2,.6,.2,1);
+      background: #fff;
+    }
+    .upload-area:hover {
+      border-color: #000;
+      background: #F4F4F2;
+    }
+    .upload-area.dragover {
+      border-color: #000;
+      background: #F4F4F2;
+    }
+    .upload-area input { display: none; }
+    .upload-area .icon {
+      width: 28px; height: 28px;
+      margin: 0 auto 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #000;
+    }
+    .upload-area .icon svg { width: 100%; height: 100%; display: block; }
+    .upload-area .icon-aa {
+      font-family: var(--font-ui-demi); font-weight: 600;
+      font-size: 20px; line-height: 1; letter-spacing: -0.04em;
+    }
+    .upload-area p {
+      font-family: var(--font-body); font-size: 14px;
+      letter-spacing: -0.03em; color: #575452;
+      margin: 0; line-height: 1.4;
+    }
+    .upload-area p strong {
+      font-weight: 600; color: #000;
+      border-bottom: 1px solid #000;
+    }
+    .upload-area p.meta {
+      font-size: 12px; color: #A0A0A0; margin-top: 2px;
+    }
+    .upload-area .filename {
+      font-family: var(--font-ui-demi); font-weight: 600;
+      font-size: 13px; letter-spacing: -0.03em;
+      color: #000; margin-top: 8px;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .upload-area .filename:empty { display: none; }
+    .upload-area .filename:not(:empty)::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: #DBFF0A;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .btn {
+      width: 100%; padding: 16px;
+      background: #000; color: #fff;
+      border: 0; border-radius: 0;
+      font-family: var(--font-body); font-size: 16px;
+      letter-spacing: -0.03em;
+      cursor: pointer;
+      transition: background 220ms cubic-bezier(.2,.6,.2,1);
+    }
+    .btn:hover { background: #222; }
+    .btn:disabled { background: #A0A0A0; cursor: not-allowed; }
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 60px 40px;
+      background: #fff;
+      border: 1px solid #DEDEDE;
+      border-radius: 8px;
+    }
+    .loading.on { display: block; }
+    .loading-bar {
+      width: 100%; max-width: 280px; margin: 0 auto 24px;
+      height: 1px; background: #DEDEDE;
+      position: relative; overflow: hidden;
+    }
+    .loading-bar::after {
+      content: ""; position: absolute; inset: 0;
+      background: #000; transform: translateX(-100%);
+      animation: slide 1.4s ease-in-out infinite;
+    }
+    @keyframes slide {
+      50% { transform: translateX(0); }
+      100% { transform: translateX(100%); }
+    }
+    .loading p {
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #000;
+    }
+    .loading .sub {
+      font-size: 13px; color: #A0A0A0; margin-top: 6px;
+    }
+    .error-msg {
+      background: #fff;
+      border: 1px solid #000;
+      border-radius: 8px;
+      padding: 16px 20px;
+      color: #000;
+      font-size: 14px; letter-spacing: -0.03em;
+      display: none;
+      margin-bottom: 16px;
+    }
+    .hero { margin-bottom: 36px; }
+    .hero .eyebrow {
+      font-family: var(--font-ui-demi); font-weight: 600;
+      font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; color: #A0A0A0;
+      margin-bottom: 16px;
+    }
+    .hero .title {
+      font-family: var(--font-display); font-weight: 400;
+      font-size: 72px; line-height: 0.95; letter-spacing: -0.03em;
+      margin: 0 0 24px;
+    }
+    .hero .title em {
+      font-style: normal; font-weight: inherit;
+    }
+    .hero .lede {
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; line-height: 1.55; color: #575452;
+      margin: 0;
+    }
+
+    /* ---------- Floating-label fields (Contacto block only) ---------- */
+    .field-float { position: relative; margin-bottom: 12px; }
+    .field-float input,
+    .field-float select {
+      width: 100%; height: 56px;
+      padding: 22px 14px 6px;
+      border: 1px solid #DEDEDE; border-radius: 8px;
+      background: #fff;
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #000;
+      outline: 0;
+      transition: border-color 220ms cubic-bezier(.2,.6,.2,1);
+    }
+    .field-float select {
+      -webkit-appearance: none; appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23000' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+      cursor: pointer;
+    }
+    .field-float input:focus,
+    .field-float select:focus { border-color: #000; }
+    .field-float input::placeholder { color: transparent; transition: color 140ms; }
+    .field-float input:focus::placeholder { color: #DEDEDE; }
+    .field-float > label {
+      position: absolute; left: 14px; top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #A0A0A0;
+      pointer-events: none; margin: 0;
+      transition: top 160ms cubic-bezier(.2,.6,.2,1),
+                  font-size 160ms cubic-bezier(.2,.6,.2,1),
+                  color 160ms cubic-bezier(.2,.6,.2,1),
+                  letter-spacing 160ms cubic-bezier(.2,.6,.2,1);
+      background: transparent;
+      max-width: calc(100% - 60px);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .field-float input:focus + label,
+    .field-float input:not(:placeholder-shown) + label,
+    .field-float.is-filled > label,
+    .field-float select:focus + label,
+    .field-float select.has-value + label {
+      top: 14px; transform: translateY(0);
+      font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; color: #000;
+      font-family: var(--font-ui-demi); font-weight: 600;
+    }
+    .field-float .req { color: #000; margin-left: 2px; font-weight: 500; }
+    .field-float .info-inline {
+      position: absolute; top: 50%; right: 14px;
+      transform: translateY(-50%);
+      pointer-events: auto;
+      transition: top 160ms cubic-bezier(.2,.6,.2,1),
+                  transform 160ms cubic-bezier(.2,.6,.2,1);
+    }
+    .field-float.has-info input { padding-right: 44px; }
+    .field-float input:focus ~ .info-inline,
+    .field-float input:not(:placeholder-shown) ~ .info-inline {
+      top: 12px; transform: translateY(0);
+    }
+
+    /* ===== Product combobox ===== */
+    .combo { position: relative; }
+    .combo-input {
+      width: 100%; height: 56px;
+      padding: 22px 44px 6px 14px;
+      border: 1px solid #DEDEDE; border-radius: 8px;
+      background: #fff;
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #000;
+      outline: 0; cursor: text;
+      transition: border-color 220ms cubic-bezier(.2,.6,.2,1);
+    }
+    .combo-input:focus, .combo.is-open .combo-input { border-color: #000; }
+    .combo-input::placeholder { color: transparent; }
+    .combo > label {
+      position: absolute; left: 14px; top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--font-body); font-size: 15px;
+      letter-spacing: -0.03em; color: #A0A0A0;
+      pointer-events: none; margin: 0;
+      transition: top 160ms cubic-bezier(.2,.6,.2,1),
+                  font-size 160ms cubic-bezier(.2,.6,.2,1),
+                  color 160ms cubic-bezier(.2,.6,.2,1),
+                  letter-spacing 160ms cubic-bezier(.2,.6,.2,1);
+      max-width: calc(100% - 60px);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .combo.is-open > label,
+    .combo.is-filled > label,
+    .combo-input:focus + label {
+      top: 14px; transform: translateY(0);
+      font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; color: #000;
+      font-family: var(--font-ui-demi); font-weight: 600;
+    }
+    .combo .chev {
+      position: absolute; right: 14px; top: 50%;
+      transform: translateY(-50%);
+      width: 14px; height: 14px; pointer-events: none;
+      transition: transform 200ms cubic-bezier(.2,.6,.2,1);
+      color: #000;
+    }
+    .combo.is-open .chev { transform: translateY(-50%) rotate(180deg); }
+    .combo-panel {
+      position: absolute; left: 0; right: 0; top: calc(100% + 6px);
+      background: #fff; border: 1px solid #DEDEDE;
+      border-radius: 8px;
+      box-shadow: 0 12px 32px -12px rgba(0,0,0,0.18);
+      z-index: 20;
+      max-height: 380px; overflow-y: auto;
+      opacity: 0; pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity 160ms cubic-bezier(.2,.6,.2,1), transform 160ms cubic-bezier(.2,.6,.2,1);
+    }
+    .combo.is-open .combo-panel {
+      opacity: 1; pointer-events: auto; transform: translateY(0);
+    }
+    .combo-meta {
+      padding: 12px 16px 8px;
+      font-family: var(--font-ui-demi); font-weight: 600;
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #A0A0A0;
+      border-bottom: 1px solid #F4F4F2;
+    }
+    .combo-option {
+      display: grid; grid-template-columns: 56px 1fr auto;
+      gap: 14px; align-items: center;
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #F4F4F2;
+      transition: background-color 120ms cubic-bezier(.2,.6,.2,1);
+    }
+    .combo-option:last-child { border-bottom: 0; }
+    .combo-option:hover, .combo-option.is-active { background: #F4F4F2; }
+    .combo-thumb {
+      width: 56px; height: 70px; /* 4:5 */
+      background: #F4F4F2;
+      background-size: cover; background-position: center;
+      flex-shrink: 0;
+    }
+    .combo-text { min-width: 0; }
+    .combo-title {
+      font-family: var(--font-body); font-size: 14px;
+      letter-spacing: -0.03em; color: #000;
+      line-height: 1.3;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .combo-sub {
+      font-family: var(--font-body); font-size: 12px;
+      letter-spacing: -0.02em; color: #575452;
+      margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .combo-sku {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px; letter-spacing: 0; color: #A0A0A0;
+      white-space: nowrap;
+    }
+    .combo-empty {
+      padding: 24px 16px; text-align: center;
+      font-family: var(--font-body); font-size: 13px;
+      letter-spacing: -0.03em; color: #A0A0A0;
+    }
+  </style>
+
+</head>
+<body>
+
+<div class="container">
+
+  <section class="hero">
+    <h1 class="title">Diseña tu trofeo, <em>con tu marca</em>, con IA</h1>
+    <p class="lede">Elige un modelo de nuestra colección y compártenos tu identidad. Nuestro agente proyecta seis piezas en apenas un minuto.</p>
+  </section>
+
+  <form id="form" enctype="multipart/form-data">
+
+    <div class="card">
+      <h2>La Marca</h2>
+      <p class="card-lede">Logos, manual y tipografías. La materia prima de un diseño fiel a tu marca.</p>
+
+      <div class="field-float">
+        <input type="url" id="url_corporativa" name="url_corporativa" placeholder="Ej. https://www.empresa.com">
+        <label for="url_corporativa">WEB / URL de la marca</label>
+      </div>
+
+      <div class="field">
+        <label>Logo(s)<span class="req">*</span></label>
+        <div class="upload-area" onclick="document.getElementById('logo_file').click()">
+          <input type="file" id="logo_file" name="logo" accept=".png,.jpg,.jpeg,.svg">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></div>
+          <p class="meta">PNG · JPG · SVG</p>
+          <div class="filename" id="logo_name"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Brandbook</label>
+        <div class="upload-area" onclick="document.getElementById('pdf_file').click()">
+          <input type="file" id="pdf_file" name="brandbook" accept=".pdf">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"></path><path d="M15 3v4h4"></path><path d="M8 13h8M8 16h8M8 19h5"></path></svg></div>
+          <p class="meta">PDF</p>
+          <div class="filename" id="pdf_name"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Tipografías</label>
+        <div class="upload-area" onclick="document.getElementById('font_file').click()">
+          <input type="file" id="font_file" name="font" accept=".ttf,.otf">
+          <div class="icon icon-aa">Aa</div>
+          <p class="meta">TTF u OTF</p>
+          <div class="filename" id="font_name"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>El Trofeo</h2>
+      <p class="card-lede">Modelo, mensaje y destinatario. Lo que no nos digas, lo proponemos por ti.</p>
+
+      <div class="field combo" id="modelo_combo">
+        <input type="text" class="combo-input" id="modelo_input" placeholder="Buscar modelo, material o categoría" autocomplete="off">
+        <label for="modelo_input">Modelo de trofeo<span class="req">*</span></label>
+        <svg class="chev" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l5 5 5-5"></path></svg>
+        <input type="hidden" id="modelo_trofeo" name="modelo_trofeo">
+        <div class="combo-panel" id="modelo_panel">
+          <div class="combo-meta">2 resultados</div>
+          <div class="combo-option" data-value="totem_basic" data-label="Totem Basic · Madera">
+            <div class="combo-thumb" style="background-image: url('/assets/trophies/Sustain-Awards-BASIC-Totem-3.jpg'); background-size: cover; background-position: center;"></div>
+            <div class="combo-text">
+              <div class="combo-title">Totem Basic</div>
+              <div class="combo-sub">Madera · Impresión UV</div>
+            </div>
+            <div class="combo-sku">SA-T01</div>
+          </div>
+          <div class="combo-option" data-value="copetin" data-label="Copetin · Metal">
+            <div class="combo-thumb" style="background-image: url('/assets/trophies/copetin.png'); background-size: cover; background-position: center;"></div>
+            <div class="combo-text">
+              <div class="combo-title">Copetin</div>
+              <div class="combo-sub">Metal · Impresión UV</div>
+            </div>
+            <div class="combo-sku">SA-C02</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="headline" name="headline" placeholder="Ej. IA Hackathon Winner 2026">
+        <label for="headline">Título del premio<span class="req">*</span></label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="subtitle" name="subtitle" placeholder="Ej. Best rookie design">
+        <label for="subtitle">Subtítulo</label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="recipient" name="recipient" placeholder="Ej. María García López">
+        <label for="recipient">Destinatario</label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="evento_nombre" name="evento_nombre" placeholder="Ej. Innovation Awards 2026">
+        <label for="evento_nombre">Nombre del evento</label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="evento_fecha" name="evento_fecha" placeholder="Ej. Madrid · Junio 2026">
+        <label for="evento_fecha">Lugar · Fecha</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Contacto</h2>
+      <p class="card-lede">
+</p>
+
+      <div class="field-float">
+        <input type="email" id="contacto_email" name="contacto_email" placeholder="Ej. maria@empresa.com">
+        <label for="contacto_email">Email</label>
+      </div>
+
+      <div class="field-float">
+        <input type="number" id="contacto_cantidad" name="contacto_cantidad" placeholder="Ej. 12" min="1">
+        <label for="contacto_cantidad">Cantidad de trofeos</label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="contacto_nombre" name="contacto_nombre" placeholder="Ej. María García">
+        <label for="contacto_nombre">Nombre</label>
+      </div>
+
+      <div class="field-float">
+        <input type="tel" id="contacto_telefono" name="contacto_telefono" placeholder="Ej. (+34) 600 000 000">
+        <label for="contacto_telefono">Número de teléfono</label>
+      </div>
+
+      <div class="field-float">
+        <input type="text" id="contacto_fecha" name="contacto_fecha" placeholder="Ej. 12 de junio de 2026">
+        <label for="contacto_fecha">Fecha evento / entrega</label>
+      </div>
+    </div>
+
+    <div id="error_msg" style="display:none; background:#fff0f0; border:1px solid #fcc; border-radius:8px; padding:14px 18px; color:#c00; font-size:14px; margin-bottom:16px;"></div>
+
+    <button type="submit" class="btn" id="btn_submit">
+      Generar diseño con IA  →
+    </button>
+
+  </form>
+
+  <div class="loading" id="loading">
+    <div class="loading-bar"></div>
+    <p>El agente está generando tu diseño…</p>
+    <p class="sub">Analizando identidad de marca y creando las propuestas (45–90 seg)</p>
+  </div>
+
+</div>
+
+<script>
+  // ===== Modelo combobox =====
+  (function(){
+    const combo = document.getElementById('modelo_combo');
+    const input = document.getElementById('modelo_input');
+    const hidden = document.getElementById('modelo_trofeo');
+    const panel = document.getElementById('modelo_panel');
+    const meta = panel.querySelector('.combo-meta');
+    const options = Array.from(panel.querySelectorAll('.combo-option'));
+    let activeIdx = -1;
+
+    function open() {
+      combo.classList.add('is-open');
+      filter(input.value);
+    }
+    function close() {
+      combo.classList.remove('is-open');
+      activeIdx = -1;
+      options.forEach(o => o.classList.remove('is-active'));
+    }
+    function filter(q) {
+      const query = (q || '').trim().toLowerCase();
+      let visible = 0;
+      options.forEach(o => {
+        const hay = (o.dataset.label + ' ' + o.querySelector('.combo-sku').textContent).toLowerCase();
+        const match = !query || hay.includes(query);
+        o.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      meta.textContent = visible + (visible === 1 ? ' resultado' : ' resultados');
+    }
+    function select(opt) {
+      hidden.value = opt.dataset.value;
+      input.value = opt.dataset.label;
+      combo.classList.add('is-filled');
+      close();
+    }
+
+    input.addEventListener('focus', open);
+    input.addEventListener('input', () => { open(); filter(input.value); });
+    input.addEventListener('keydown', e => {
+      const visible = options.filter(o => o.style.display !== 'none');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault(); open();
+        activeIdx = Math.min(activeIdx + 1, visible.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIdx = Math.max(activeIdx - 1, 0);
+      } else if (e.key === 'Enter' && activeIdx >= 0 && visible[activeIdx]) {
+        e.preventDefault(); select(visible[activeIdx]);
+      } else if (e.key === 'Escape') {
+        close(); input.blur();
+      }
+      options.forEach(o => o.classList.remove('is-active'));
+      if (visible[activeIdx]) visible[activeIdx].classList.add('is-active');
+    });
+    options.forEach(o => o.addEventListener('mousedown', e => {
+      e.preventDefault(); select(o);
+    }));
+    document.addEventListener('mousedown', e => {
+      if (!combo.contains(e.target)) close();
+    });
+  })();
+
+  document.getElementById('logo_file').addEventListener('change', function() {
+    document.getElementById('logo_name').textContent = this.files[0]?.name || '';
+  });
+  document.getElementById('pdf_file').addEventListener('change', function() {
+    document.getElementById('pdf_name').textContent = this.files[0]?.name || '';
+  });
+  document.getElementById('font_file').addEventListener('change', function() {
+    document.getElementById('font_name').textContent = this.files[0]?.name || '';
+  });
+
+  document.querySelectorAll('.upload-area').forEach(area => {
+    area.addEventListener('dragover', e => {
+      e.preventDefault(); area.classList.add('dragover');
+    });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', e => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      const input = area.querySelector('input[type=file]');
+      if (e.dataTransfer.files.length) {
+        input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event('change'));
+      }
+    });
+  });
+
+  document.getElementById('form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn_submit');
+    const errEl = document.getElementById('error_msg');
+    btn.disabled = true;
+    btn.textContent = 'Generando…';
+    if (errEl) errEl.style.display = 'none';
+    document.getElementById('loading').classList.add('on');
+    document.getElementById('form').style.display = 'none';
+
+    try {
+        const formData = new FormData(this);
+        const resp = await fetch('/generar', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Error del servidor');
+        sessionStorage.setItem('sa_job', JSON.stringify(data));
+        window.location.href = '/resultados';
+    } catch (err) {
+        document.getElementById('form').style.display = 'block';
+        document.getElementById('loading').classList.remove('on');
+        btn.disabled = false;
+        btn.textContent = 'Generar diseño con IA  →';
+        if (errEl) { errEl.textContent = 'Error: ' + err.message; errEl.style.display = 'block'; }
+    }
+  });
+</script>
+
+
+</body></html>

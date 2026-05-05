@@ -1673,6 +1673,18 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
                                    trophy_constraints=trophy_constraints)
                  for i, c in enumerate(conceptos[:6])]
 
+    # Forzar textos del cliente si los proporcionó — no dejar que la IA los cambie
+    _award_input = pedido.get("award", {})
+    _hl_fixed  = _award_input.get("headline", "").strip()
+    _rec_fixed = _award_input.get("recipient", "").strip()
+    _sub_fixed = _award_input.get("subtitle", "").strip()
+    if _hl_fixed or _rec_fixed or _sub_fixed:
+        for c in conceptos:
+            at = c.setdefault("award_text", {})
+            if _hl_fixed:  at["headline"]  = _hl_fixed
+            if _rec_fixed: at["recipient"] = _rec_fixed
+            if _sub_fixed: at["subtitle"]  = _sub_fixed
+
     # Garantía dura: máximo 3 fondos oscuros. Convierte los extras a "mid" (P6 → P4 → P3).
     _dark_ids = [c["proposal_id"] for c in conceptos if c.get("bg_tone") == "dark"]
     if len(_dark_ids) > 3:
