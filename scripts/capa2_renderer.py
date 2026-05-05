@@ -110,6 +110,39 @@ def _mejor_zona_texto(profile: list | None, y0_frac: float, y1_frac: float,
     return best_y
 
 
+def _mejor_zona_luminancia(
+    img: "Image.Image",
+    y0_frac: float = 0.25,
+    y1_frac: float = 0.85,
+    window: int = 30,
+) -> tuple[int, float]:
+    """
+    Analiza la imagen de fondo (ANTES de logo y texto) y devuelve la banda
+    vertical con mayor contraste lector: (y_centro_px, luminancia_media).
+
+    La zona con mayor desviación de 0.5 (muy clara ó muy oscura) tiene el
+    mejor contraste potencial para texto. Funciona para fondos PIL y DALL-E.
+
+    luminancia_media < 0.5 → zona oscura (texto claro).
+    luminancia_media > 0.5 → zona clara (texto oscuro).
+    """
+    arr = np.array(img.convert("RGB"), dtype=np.float32)
+    h, w = arr.shape[:2]
+    y0, y1 = int(y0_frac * h), int(y1_frac * h)
+    x0, x1 = int(0.10 * w), int(0.90 * w)
+    if y1 <= y0 or x1 <= x0:
+        return h // 2, 0.5
+    lum = (0.299 * arr[y0:y1, x0:x1, 0] +
+           0.587 * arr[y0:y1, x0:x1, 1] +
+           0.114 * arr[y0:y1, x0:x1, 2]) / 255.0
+    row_lum = lum.mean(axis=1)
+    k = min(window, len(row_lum))
+    smooth = np.convolve(row_lum, np.ones(k) / k, mode="same")
+    best_rel = int(np.argmax(np.abs(smooth - 0.5)))
+    best_y = y0 + best_rel
+    return best_y, float(smooth[best_rel])
+
+
 # ─── Utilidades de color ──────────────────────────────────────────────────────
 
 def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -616,21 +649,12 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         text_width = max(20, w - _zone_l_px - (_zone_r_px or 0))
         # No aplicar zonas asimétricas P1/P5 — la zona ya es la correcta para la forma
     else:
-        # Trofeo rectangular: aplicar márgenes estándar y zonas P1/P5
+        # Trofeo rectangular: margen estándar uniforme.
+        # El alignment (left/center/right) viene del concepto — ninguna propuesta
+        # tiene zona fija; la posición visual la maneja el campo alignment del diseño.
         _min_tw    = max(20, int(_base_w * 0.25))
         text_width = max(_min_tw, _base_w - 2 * margin_h)
         x_start    = margin_h
-        if _i6_zone == 0:        # P1 — zona izquierda (74% del ancho)
-            text_width = max(60, int(w * 0.74) - margin_h)
-            if hl_align  == "center": hl_align  = "left"
-            if rec_align == "center": rec_align = "left"
-            if sub_align == "center": sub_align = "left"
-        elif _i6_zone == 4:      # P5 — zona derecha (empieza en 32%)
-            x_start    = max(margin_h, int(w * 0.32))
-            text_width = max(60, w - x_start - margin_h)
-            if hl_align  == "center": hl_align  = "right"
-            if rec_align == "center": rec_align = "right"
-            if sub_align == "center": sub_align = "right"
 
     # ── Geometría vertical ───────────────────────────────────────────
     # Layouts de canvas completo: elementos distribuidos por toda la altura
@@ -793,14 +817,22 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
 
     # ── Decoraciones por concepto (PIL) — capa de fondo antes del texto ──
     # Equivalente a las decoraciones CSS del HTML renderer.
+    # Seed de variedad: 2/3 de ejecuciones con decoración, 1/3 sin ella
+    import hashlib as _hlib_pil
+    _pil_deco_seed = int(_hlib_pil.md5(
+        f"{concepto.get('_run_id','')}{concepto.get('proposal_id',1)}pildeco".encode()
+    ).hexdigest()[:6], 16)
+    _pil_deco_on = (_pil_deco_seed % 3) != 0
+
     if _i6_pil == 0:
-        # P1: Círculo watermark esquina inferior derecha en color estructural de marca
-        cs  = int(min(w, h) * 0.72)
-        cx  = int(w * 0.80)
-        cy  = int(h * 0.74)
-        draw.ellipse([cx - cs//2, cy - cs//2, cx + cs//2, cy + cs//2],
-                     outline=(*_pil_struct_rgb, 41), width=2)
-        # P1: headline en color estructural de marca
+        # P1: Círculo watermark (solo 2/3 de ejecuciones) + headline en color de marca
+        if _pil_deco_on:
+            cs  = int(min(w, h) * 0.72)
+            cx  = int(w * 0.80)
+            cy  = int(h * 0.74)
+            draw.ellipse([cx - cs//2, cy - cs//2, cx + cs//2, cy + cs//2],
+                         outline=(*_pil_struct_rgb, 41), width=2)
+        # Headline en color estructural de marca (siempre)
         if _is_vivid(_pil_struct):
             hl_color = _pil_struct
 
@@ -844,9 +876,14 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
             y_fec = min(y_sub + int(h * 0.06), int(h * 0.97))
         else:
             y_hl  = y_start
-            y_rec = h // 2
             y_sub = int(h * 0.85)
             y_fec = int(h * 0.91)
+            # Centrar recipient en la zona más legible del fondo si está disponible
+            _lum_y_sp = tc.get("_lum_zone_y")
+            if _lum_y_sp is not None:
+                y_rec = max(int(h * 0.30), min(int(h * 0.70), _lum_y_sp))
+            else:
+                y_rec = h // 2
 
         if _profile:
             _zl_hl,  _zr_hl,  _tw_hl  = _tw_en_y(_profile, y_hl,  w, _fb_zl, _fb_zr)
@@ -879,8 +916,8 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         rec_color = _color_sobre_region(img, rec_color, _zl_rec, y_rec, _tw_rec,  max(1, int(h * 0.20)))
         sub_color = _color_sobre_region(img, sub_color, _zl_sub, y_sub, _tw_sub,  max(1, int(h * 0.12)))
 
-        # P5: triple punto de acento entre headline y recipient
-        if _i6_pil == 4:
+        # P5: triple punto de acento entre headline y recipient (solo 2/3 de ejecuciones)
+        if _i6_pil == 4 and _pil_deco_on:
             gap_av = max(0, y_rec - (y_hl + sz_hl + 6))
             dot_y5 = y_hl + sz_hl + max(10, gap_av // 2 - 4)
             dot_y5 = min(dot_y5, y_rec - 20)
@@ -1030,7 +1067,11 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
         if recipient:
             lineas_rec = _wrap_sin_partir(draw, recipient, font_rec_b, text_width)
             rec_h_px   = len(lineas_rec) * (font_rec_b.getbbox("A")[3] + 6)
-            y_rec      = rec_top + max(0, (rec_zone - rec_h_px) // 2)
+            _lum_y_bb  = tc.get("_lum_zone_y")
+            if _lum_y_bb is not None and rec_top <= _lum_y_bb <= rec_bot:
+                y_rec = max(rec_top, _lum_y_bb - rec_h_px // 2)
+            else:
+                y_rec = rec_top + max(0, (rec_zone - rec_h_px) // 2)
         else:
             y_rec = rec_top
 
@@ -1064,7 +1105,12 @@ def _render_texto(concepto: dict, img: Image.Image, award: dict,
     elif text_anchor == "bottom":
         y = max(y_start, y_end - total_h)
     else:
-        y = y_start + max(0, (zone_h - total_h) // 2)
+        # Sin máscara: usar zona de máxima legibilidad del fondo si disponible
+        _lum_y_st = tc.get("_lum_zone_y")
+        if _lum_y_st is not None and y_start <= _lum_y_st <= y_end:
+            y = max(y_start, _lum_y_st - total_h // 2)
+        else:
+            y = y_start + max(0, (zone_h - total_h) // 2)
 
     # ── Helper separador ─────────────────────────────────────────────
     def _sep(y_pos):
@@ -1466,13 +1512,9 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
         # Máscara irregular: zona fija que garantiza el texto dentro de la forma
         zone_l = _tc_zone_l
         zone_r = _tc_zone_r if _tc_zone_r is not None else 0
-    elif i6_zone == 0:      # P1 — zona izquierda (deja 26% derecho libre)
-        zone_l = margin_px
-        zone_r = int(w * 0.26)
-    elif i6_zone == 4:      # P5 — zona derecha
-        zone_l = int(w * 0.32)
-        zone_r = margin_px
-    else:                   # resto — ancho completo
+    else:
+        # Trofeo rectangular: margen estándar uniforme para todos los slots.
+        # El alignment (left/center/right) del concepto maneja la posición visual.
         zone_l = margin_px
         zone_r = margin_px
 
@@ -1570,8 +1612,19 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
     # Si Claude especificó un motif distinto → el slot no fuerza su decoración
     _hint = concepto.get("decoration_hint", "none")
     _use_slot_deco = (_hint in ("none", "auto"))  # slot decoration only when hint is none/auto
-    _p2_rule = (_hint == "rule_grid") or (_use_slot_deco and i6 == 1)
-    _p5_dot  = (_hint == "dot_arc")  or (_use_slot_deco and i6 == 4)
+
+    # Seed de variedad para decoraciones — mismo concepto varía entre ejecuciones
+    import hashlib as _hlib_deco
+    _deco_seed = int(_hlib_deco.md5(
+        f"{concepto.get('_run_id','')}{concepto.get('proposal_id',1)}deco".encode()
+    ).hexdigest()[:6], 16)
+    # P2 y P5 tienen decoraciones fijas por slot que se vuelven predecibles.
+    # Con el seed: 2 de cada 3 ejecuciones muestran la decoración; 1 de 3, no.
+    _deco_p2_on = (_deco_seed % 3) != 0
+    _deco_p5_on = (_deco_seed % 3) != 0
+
+    _p2_rule = (_hint == "rule_grid") or (_use_slot_deco and i6 == 1 and _deco_p2_on)
+    _p5_dot  = (_hint == "dot_arc")  or (_use_slot_deco and i6 == 4 and _deco_p5_on)
 
     if i6 == 0:
         # ─── P1 PREMIUM OSCURO ───────────────────────────────────────
@@ -1619,7 +1672,7 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
         )
         if _p2_color:
             rec_extra_css = f"color: {_p2_color};"
-        _p2_rule = True
+        _p2_rule = _deco_p2_on  # seed decide si mostrar la regla en esta ejecución
 
     elif i6 == 2:
         # ─── P3 GRÁFICO AUDAZ ────────────────────────────────────────
@@ -1695,7 +1748,7 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
         )
         if _p5_color:
             rec_extra_css = f"color: {_p5_color};"
-        _p5_dot = True
+        _p5_dot = _deco_p5_on  # seed decide si mostrar los 3 puntos en esta ejecución
 
     else:
         # ─── P6 MARCA PURA ───────────────────────────────────────────
@@ -1904,8 +1957,12 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
             _sp_rec_max_h = max(40, _y_sub_h - _y_rec_h - int(h * 0.04))
         else:
             _y_hl_h  = _hl_top
-            _y_rec_h = max(_hl_top + _sp_hl_max_h + int(h * 0.04), int(h * 0.36))
             _y_sub_h = h - sub_bot - sub_px
+            _lum_y_sp_h = tc.get("_lum_zone_y")
+            if _lum_y_sp_h is not None:
+                _y_rec_h = max(int(h * 0.30), min(int(h * 0.70), _lum_y_sp_h))
+            else:
+                _y_rec_h = max(_hl_top + _sp_hl_max_h + int(h * 0.04), int(h * 0.36))
             _sp_rec_max_h = max(40, _y_sub_h - _y_rec_h - int(h * 0.04))
 
         _zl_hl_h,  _zr_hl_h,  _sp_w_hl  = _html_zone(_y_hl_h)
@@ -1964,7 +2021,11 @@ def _build_html(concepto: dict, award: dict, bg_data_url: str,
             _st_zl, _st_zr, _st_w = _html_zone(_st_opt_y)
             mid = _st_opt_y
         else:
-            mid = (y_start + y_end) // 2
+            _lum_y_st_h = tc.get("_lum_zone_y")
+            if _lum_y_st_h is not None and y_start <= _lum_y_st_h <= y_end:
+                mid = _lum_y_st_h
+            else:
+                mid = (y_start + y_end) // 2
             _st_zl, _st_zr, _st_w = _html_zone(mid)
 
         if anchor == "top":
@@ -2034,14 +2095,9 @@ def _render_texto_html(concepto: dict, img: Image.Image, award: dict,
     if _zone_l_px is not None:
         text_width = max(20, w - _zone_l_px - (_zone_r_px or 0))
     else:
+        # Margen estándar uniforme — sin zonas asimétricas por proposal_id.
         _min_tw_h  = max(20, int(_base_w * 0.25))
-        _use_full_w = (_base_w < 100)
-        if not _use_full_w and i6_z == 0:
-            text_width = max(_min_tw_h, _base_w - margin_px - int(_base_w * 0.26))
-        elif not _use_full_w and i6_z == 4:
-            text_width = max(_min_tw_h, _base_w - int(_base_w * 0.32) - margin_px)
-        else:
-            text_width = max(_min_tw_h, _base_w - 2 * margin_px)
+        text_width = max(_min_tw_h, _base_w - 2 * margin_px)
 
     headline  = award.get("headline",  "") or ""
     recipient = award.get("recipient", "") or ""
@@ -2269,6 +2325,14 @@ def renderizar_diseno(concepto: dict, w: int, h: int,
     if _i6_ov in (0, 2) and dalle_prompt:  # P1/P3 con fondo DALLE: sin overlay
         _ov_cfg = {}
     img = _apply_overlay(img, _ov_cfg, w, h)
+
+    # ── Paso 2b: Análisis de luminancia del fondo para posicionamiento adaptivo ──
+    # Ejecutar ANTES del logo — se analiza el fondo puro generado por DALL-E/PIL.
+    # El resultado se inyecta en text_style para que layouts stacked/spread/billboard
+    # lo usen como guía de posición vertical sin conocer el generador específico.
+    _lum_y, _lum_val = _mejor_zona_luminancia(img)
+    concepto.setdefault("text_style", {})["_lum_zone_y"]  = _lum_y
+    concepto.setdefault("text_style", {})["_lum_zone_lum"] = _lum_val
 
     # ── Paso 3: Logo (PIL) ────────────────────────────────────────────
     img, logo_bottom = _render_logo(concepto, img, logo_path, w, h)

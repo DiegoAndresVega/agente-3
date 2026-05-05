@@ -467,7 +467,15 @@ CAMPO text_style.layout — distribución del texto en el canvas:
                   centro, subtitle DERECHA abajo. Tensión diagonal deliberada. Solo para P3.
   - "billboard" → recipient domina el canvas, headline y subtitle como micro-captions. Solo P4.
   PROHIBIDO: "vertical" (texto girado 90° — ilegible en objeto físico)
-  Distribución: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+  Distribución sugerida: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
+
+VARIEDAD OBLIGATORIA DE TEXTO — los 6 conceptos deben verse claramente distintos:
+  □ LAYOUTS: usa al menos 3 layouts distintos. Máximo 2 veces "stacked".
+  □ ANCHORS: varía text_anchor entre los 6 conceptos. Usa "top", "center" Y "bottom".
+    Ejemplo válido: P1=top, P2=center, P3=center, P4=center, P5=bottom, P6=center.
+    NO pongas "center" en los 6 — sería visualmente idéntico.
+  □ ALINEACIONES: varía recipient_alignment. No uses "center" en todos.
+    Al menos 2 conceptos con "left" o "right", resto "center".
 
 JERARQUÍA FIJA: recipient > headline > subtitle (siempre, en todos los conceptos)
 
@@ -1280,23 +1288,51 @@ def _validar_concepto(c: dict, idx: int, font_style_category: str = "",
     # ── Parámetros FORZADOS — 6 arquetipos visuales distintos ──
     # Claude controla colores, dalle_prompt y award_text; el sistema controla estructura.
     # JERARQUÍA FIJA: recipient (100%) > headline (45-50%) > subtitle (22-25%)
-    _anchors  = ["top",     "center",  "center",    "center",   "top",     "center"]
     _layouts  = ["stacked", "spread",  "staggered", "billboard","spread",  "stacked"]
-    # P1 PREMIUM OSCURO:   stacked LEFT zone  — texto anclado izquierda
-    # P2 EDITORIAL BLANCO: spread FULL WIDTH  — editorial centrado
-    # P3 GRÁFICO AUDAZ:    staggered FULL     — barra izquierda + texto diagonal
-    # P4 BILLBOARD:        billboard CENTER   — nombre domina el canvas
-    # P5 MÍNIMO MODERNO:   spread RIGHT zone  — texto anclado derecha
-    # P6 MARCA PURA:       stacked CENTER     — identidad simétrica
     _rec_sz   = [0.18,      0.22,      0.20,        0.22,       0.18,      0.16]
     _hl_sz    = [0.090,     0.100,     0.082,       0.090,      0.085,     0.080]
     _sub_sz   = [0.040,     0.048,     0.038,       0.042,      0.040,     0.037]
     _spacing  = [1.2,       0.8,       0.6,         0.8,        1.0,       1.6]
     _upper    = [False,     True,      True,        True,       False,     False]
-    # Alineaciones: P1 izquierda, P3 diagonal, P5 derecha, resto centrado
-    _hl_alns  = ["left",    "center",  "right",     "center",   "right",   "center"]
-    _rec_alns = ["left",    "center",  "left",      "center",   "right",   "center"]
-    _sub_alns = ["left",    "center",  "right",     "center",   "right",   "center"]
+
+    # Seed de variedad por run: mismo slot distinto entre ejecuciones.
+    # _run_id cambia cada ejecución → seed diferente → variante de posición diferente.
+    import hashlib as _hlib
+    _vseed = int(_hlib.md5(
+        f"{c.get('_run_id', '')}{c.get('proposal_id', 1)}".encode()
+    ).hexdigest()[:6], 16)
+    _vi = _vseed % 4  # 4 variantes posibles de posicionamiento por slot
+
+    # Tablas de variedad: 4 filas (variantes) × 6 columnas (slots P1-P6)
+    # Las variantes rotan anchor y alineaciones para que cada ejecución sea distinta.
+    _ANCHOR_VAR = [
+        ["top",    "center", "center", "center", "top",    "center"],  # var 0 (base)
+        ["center", "top",    "center", "center", "bottom", "top"   ],  # var 1
+        ["top",    "center", "center", "center", "center", "bottom"],  # var 2
+        ["bottom", "top",    "center", "center", "top",    "center"],  # var 3
+    ]
+    _HL_ALN_VAR = [
+        ["left",   "center", "right",  "center", "right",  "center"],  # var 0
+        ["center", "left",   "right",  "center", "center", "left"  ],  # var 1
+        ["left",   "center", "right",  "center", "left",   "right" ],  # var 2
+        ["right",  "left",   "right",  "center", "right",  "center"],  # var 3
+    ]
+    _REC_ALN_VAR = [
+        ["left",   "center", "left",   "center", "right",  "center"],  # var 0
+        ["center", "left",   "left",   "center", "center", "right" ],  # var 1
+        ["left",   "right",  "left",   "center", "left",   "center"],  # var 2
+        ["right",  "center", "left",   "center", "right",  "left"  ],  # var 3
+    ]
+    _SUB_ALN_VAR = [
+        ["left",   "center", "right",  "center", "right",  "center"],  # var 0
+        ["center", "left",   "right",  "center", "center", "left"  ],  # var 1
+        ["left",   "center", "right",  "center", "left",   "right" ],  # var 2
+        ["right",  "left",   "right",  "center", "right",  "center"],  # var 3
+    ]
+    _anchors  = _ANCHOR_VAR [_vi]
+    _hl_alns  = _HL_ALN_VAR [_vi]
+    _rec_alns = _REC_ALN_VAR[_vi]
+    _sub_alns = _SUB_ALN_VAR[_vi]
 
     # ── Defaults (solo se aplican si Claude no proporcionó el campo) ───────────
     # Usar colores de marca como fallback; si no hay, usar blanco/gris neutro (nunca dorado fijo)
@@ -1443,6 +1479,42 @@ def guardar_spec(spec: dict, id_pedido: str) -> Path:
     return ruta
 
 
+# ─── Sanitizador de dalle_prompt ──────────────────────────────────────────────
+
+def _sanitizar_dalle_prompt(prompt: str, bg_tone: str) -> str:
+    """
+    Reemplaza vocabulario oscuro en dalle_prompt cuando bg_tone es mid o light.
+    DALL-E genera fondos oscuros si el prompt los describe, independientemente
+    de bg_tone. Esta función alinea el texto del prompt con el tono deseado.
+    Solo actúa para bg_tone in ("mid", "light"). Los reemplazos son word-boundary
+    para evitar sustituir partes de palabras (ej: "dark red" → "vivid red").
+    """
+    if bg_tone not in ("mid", "light"):
+        return prompt
+    import re
+    _reemplazos = [
+        (r'\bdark background\b',  'vivid saturated background'),
+        (r'\bdarkened\b',         'saturated'),
+        (r'\bdark tones?\b',      'brand tones'),
+        (r'\bdark\b',             'vivid'),
+        (r'\bblack\b',            'deep brand-colored'),
+        (r'\bcarbon\b',           'saturated'),
+        (r'\bmidnight\b',         'bold'),
+        (r'\bobsidian\b',         'vivid'),
+        (r'\bshadow\b',           'accent'),
+        (r'\bcharcoal\b',         'saturated'),
+        (r'\bdim\b',              'bright'),
+        (r'\bmoody\b',            'energetic'),
+        (r'\bnoir\b',             'bold'),
+        (r'\bgloomy\b',           'atmospheric'),
+        (r'\bdusk\b',             'golden hour'),
+    ]
+    result = prompt
+    for pattern, replacement in _reemplazos:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    return result
+
+
 # ─── Pipeline principal ───────────────────────────────────────────────────────
 
 def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, dict]:
@@ -1486,10 +1558,26 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
         print("  → Brandbook disponible — Color Oracle omitido")
 
     elif _fc_logo_confirmed and _fc_saturated_count >= 1:
-        # Logo confirmado por Firecrawl: el primario es fiable.
-        # No buscamos secundarios adicionales — screenshots con anuncios o banners
-        # de temporada producen colores que no son de identidad de marca.
-        print(f"\n[0.5] Color Oracle: omitido — logo_color confirmado por Firecrawl: {brand_context['canonical_palette']}")
+        # Firecrawl devolvió logo_color, pero puede ser una alucinación (ej: Apple → verde).
+        # Si tenemos el logo real, Oracle lo valida contra los píxeles del logo.
+        # Sin logo → confiar en Firecrawl (no hay forma de verificar).
+        _tiene_logo_fc = bool(brand_context.get("logo_path"))
+        if _tiene_logo_fc:
+            print(f"\n[0.5] Color Oracle (validador logo) — verificando logo_color Firecrawl={brand_context['canonical_palette'][0]}...")
+            _canon_fc_val = _llamada_color_oracle(brand_context)
+            if _canon_fc_val:
+                _fc_prim  = brand_context["canonical_palette"][0]
+                _ora_prim = _canon_fc_val[0]
+                _dist_fc  = _hue_dist(_fc_prim, _ora_prim)
+                if _dist_fc > 0.11:
+                    brand_context["canonical_palette"] = _consolidar_hsv(_canon_fc_val, max_grupos=3)
+                    print(f"  [Oracle] logo_color Firecrawl={_fc_prim} ≠ logo real ({_ora_prim}, Δ={_dist_fc:.2f}) → Oracle corrige")
+                else:
+                    print(f"  [Oracle] logo_color confirmado: {_fc_prim} ≈ {_ora_prim} (Δ={_dist_fc:.2f}) → Firecrawl válido")
+            else:
+                print(f"  [Oracle] Sin resultado — Firecrawl respetado: {brand_context['canonical_palette']}")
+        else:
+            print(f"\n[0.5] Color Oracle: omitido — logo_color Firecrawl sin logo para validar: {brand_context['canonical_palette']}")
 
     elif _tiene_firecrawl:
         # Firecrawl 2+ colores pero sin logo_color confirmado → Oracle valida el primario
@@ -1615,6 +1703,19 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
             if c.get("bg_tone") == "dark" and c.get("proposal_id") in (3, 4):
                 c["bg_tone"] = "mid"
                 print(f"  [postproceso] P{c['proposal_id']}: dark→mid (primario cálido {primary_col} lum={_prim_lum:.2f})")
+
+    # Sanitizar dalle_prompt para que el vocabulario coincida con bg_tone resultante.
+    # DALL-E ignora bg_tone; si el prompt describe escenas oscuras para una propuesta mid/light
+    # se generará un fondo oscuro igualmente. Este sanitizador reemplaza términos oscuros
+    # por equivalentes de tono medio sin alterar la creatividad del diseño.
+    for c in conceptos:
+        _dp = c.get("dalle_prompt", "")
+        if _dp and c.get("bg_tone") in ("mid", "light"):
+            _dp_nuevo = _sanitizar_dalle_prompt(_dp, c["bg_tone"])
+            if _dp_nuevo != _dp:
+                c["dalle_prompt"] = _dp_nuevo
+                print(f"  [postproceso] P{c['proposal_id']}: dalle_prompt sanitizado (bg={c['bg_tone']})")
+
     while len(conceptos) < 6:
         conceptos.append(_validar_concepto({}, len(conceptos), style_cat,
                                            primary_color=primary_col,

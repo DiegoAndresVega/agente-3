@@ -77,6 +77,19 @@ def generar_fondo(prompt: str, ancho: int, alto: int,
         # Inyectar HEX de marca al inicio del prompt — DALL-E respeta colores cuando se dan explícitamente
         primary_hex   = (concepto or {}).get("_primary", color_fallback)
         secondary_hex = (concepto or {}).get("_secondary", "")
+        # Para fondos mid con primario casi negro (lum < 0.06): inyectar secundario como dominant
+        # Razón: inyectar #000000 como "primary brand color" hace que DALL-E genere negro,
+        # bloqueando cualquier intento del dalle_prompt de crear un fondo vivid/saturado.
+        bg_tone_dalle = (concepto or {}).get("bg_tone", "dark")
+        if bg_tone_dalle == "mid" and primary_hex and secondary_hex:
+            try:
+                h = primary_hex.lstrip("#")
+                _plum = (int(h[0:2],16)*299 + int(h[2:4],16)*587 + int(h[4:6],16)*114) / (255*1000)
+                if _plum < 0.06:   # primario prácticamente negro → usar secundario como color dominante
+                    primary_hex, secondary_hex = secondary_hex, primary_hex
+                    print(f"  [DALLE-FONDO] P{pid} Primario oscuro → invirtiendo inyección para fondo mid")
+            except Exception:
+                pass
         prompt = _inyectar_colores_en_prompt(prompt, primary_hex, secondary_hex)
         print(f"  [DALLE-FONDO] P{pid} → Llamando gpt-image-1  ({size}, quality={CALIDAD_IMAGEN}) ...")
         print(f"  [DALLE-FONDO] P{pid} Colores inyectados: primary={primary_hex} · accent={secondary_hex or '—'}")
