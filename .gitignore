@@ -29,3 +29,7 @@ lakla.txt
 
 # Specs de diseño generadas (regenerables, pueden contener datos de clientes)
 outputs/design_specs/
+
+# macOS
+.DS_Store
+**/.DS_Store
