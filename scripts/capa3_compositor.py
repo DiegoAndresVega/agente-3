@@ -1,90 +1,97 @@
 """
 CAPA 3 — Compositor
-Sustain Awards
+Agente 3 — Sustain Awards Custom
 
-Proyecta la imagen del diseño (generada por Capa 2) sobre la fotografía
-real del trofeo en las coordenadas calibradas.
+A diferencia del Agente 2, aquí NO hay foto de trofeo base.
+La imagen del trofeo llega ya generada por capa_imagen.py.
+Esta capa normaliza, encuadra y exporta al formato final.
 
-Soporta dos modos según zona_imprimible.forma:
-  - rectangular (default) : paste simple en bounding box
-  - mascara               : recorte por polígono irregular via máscara PNG
+También mantiene `cargar_modelo_material` como interfaz unificada
+para que test_server.py pueda cargar specs del material.
 """
 
 import json
 from pathlib import Path
 
-from PIL import Image, ImageFilter
-
+from PIL import Image, ImageOps
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR     = PROJECT_ROOT / "data"
 
 
-def cargar_modelo_trofeo(id_modelo: str) -> dict:
-    """Carga la especificación del modelo de trofeo desde el catálogo."""
-    with open(DATA_DIR / "trophy_catalog.json", encoding="utf-8") as f:
+def cargar_modelo_material(id_material: str) -> dict:
+    """Carga la especificación del material desde material_catalog.json."""
+    catalog_path = DATA_DIR / "material_catalog.json"
+    with open(catalog_path, encoding="utf-8") as f:
         catalogo = json.load(f)
-    for modelo in catalogo["modelos"]:
-        if modelo["id"] == id_modelo:
-            return modelo
-    raise ValueError(f"Modelo de trofeo '{id_modelo}' no encontrado en el catálogo")
+    for material in catalogo["materiales"]:
+        if material["id"] == id_material:
+            return material
+    raise ValueError(f"Material '{id_material}' no encontrado en material_catalog.json")
 
 
-def componer(diseno_rgba: Image.Image,
-             trofeo_path: str,
-             zona: dict) -> Image.Image:
+# Alias de compatibilidad — test_server puede llamar a cargar_modelo_trofeo en el futuro
+def cargar_modelo_trofeo(id_modelo: str) -> dict:
+    """Alias de compatibilidad con la interfaz del Agente 2."""
+    return cargar_modelo_material(id_modelo)
+
+
+def componer(
+    trofeo_img: Image.Image,
+    material_config: dict,
+) -> Image.Image:
     """
-    Pega el diseño sobre la foto del trofeo según el modo de la zona imprimible.
+    Normaliza la imagen del trofeo generada por capa_imagen y la devuelve lista para exportar.
 
-    - forma='mascara'     → recorte por polígono irregular (copetin, etc.)
-    - forma=rectangular   → paste directo en bounding box (totem, placa, etc.)
+    En el Agente 3 no hay compositing sobre foto: el trofeo ya es la imagen final.
+    Esta función garantiza:
+      - Tamaño de salida correcto (según material_config.dimensiones_output)
+      - Modo RGB para exportación JPG
+      - Encuadre limpio (centra el trofeo si tiene padding desigual)
+
+    Args:
+        trofeo_img:      Imagen PIL en RGB generada por capa_imagen.py
+        material_config: Entrada del material_catalog.json
+
+    Returns:
+        Imagen PIL en RGB lista para .save() como JPG.
     """
-    forma = zona.get("forma", "rectangular")
-    print(f"  [Capa 3] Compositing → {forma}  ({zona.get('ancho','?')}×{zona.get('alto','?')}px)")
-    if forma == "mascara":
-        return _componer_mascara(diseno_rgba, trofeo_path, zona)
-    return _componer_rectangular(diseno_rgba, trofeo_path, zona)
+    dims   = material_config.get("dimensiones_output", {"ancho": 1024, "alto": 1536})
+    target = (dims["ancho"], dims["alto"])
+
+    img = trofeo_img.convert("RGB")
+
+    if img.size != target:
+        img = _encuadrar_con_fondo(img, target)
+
+    pid_log = "(sin pid)"
+    print(f"  [Capa 3] Trofeo normalizado {img.size[0]}×{img.size[1]}px  {pid_log}")
+    return img
 
 
-def _componer_rectangular(diseno_rgba: Image.Image,
-                           trofeo_path: str,
-                           zona: dict) -> Image.Image:
-    """Modo clásico: escala el diseño al bounding box y lo pega directamente."""
-    trofeo = Image.open(trofeo_path).convert("RGBA")
-    diseno_final = diseno_rgba.resize((zona["ancho"], zona["alto"]), Image.LANCZOS)
-    if diseno_final.mode != "RGBA":
-        diseno_final = diseno_final.convert("RGBA")
-    trofeo.paste(diseno_final, (zona["x"], zona["y"]), diseno_final)
-    return trofeo.convert("RGB")
-
-
-def _componer_mascara(diseno_rgba: Image.Image,
-                      trofeo_path: str,
-                      zona: dict) -> Image.Image:
+def _encuadrar_con_fondo(
+    img: Image.Image,
+    target: tuple[int, int],
+    fondo_color: tuple[int, int, int] = (248, 248, 246),
+) -> Image.Image:
     """
-    Modo máscara: el diseño se escala al bounding box y se recorta
-    con la máscara de polígono irregular antes de pegarlo sobre el trofeo.
+    Redimensiona preservando aspecto y centra sobre fondo claro.
+    Equivalente a "object-fit: contain" de CSS.
     """
-    trofeo = Image.open(trofeo_path).convert("RGBA")
-    tw, th = trofeo.size
+    img_ratio    = img.width  / img.height
+    target_ratio = target[0] / target[1]
 
-    # 1. Escalar el diseño al bounding box de la zona imprimible
-    bb_x, bb_y = zona["x"], zona["y"]
-    bb_w, bb_h = zona["ancho"], zona["alto"]
-    diseno = diseno_rgba.resize((bb_w, bb_h), Image.LANCZOS).convert("RGBA")
+    if img_ratio > target_ratio:
+        nuevo_ancho = target[0]
+        nuevo_alto  = int(target[0] / img_ratio)
+    else:
+        nuevo_alto  = target[1]
+        nuevo_ancho = int(target[1] * img_ratio)
 
-    # 2. Cargar la máscara completa y recortar al bounding box
-    mascara_path = PROJECT_ROOT / zona["mascara"]
-    mascara_full = Image.open(mascara_path).convert("L")   # escala de grises
-    mascara_crop = mascara_full.crop((bb_x, bb_y, bb_x + bb_w, bb_y + bb_h))
+    img_resized = img.resize((nuevo_ancho, nuevo_alto), Image.LANCZOS)
 
-    # 3. Aplicar la máscara como canal alpha del diseño
-    #    Blanco (255) en la máscara = visible | Negro (0) = transparente
-    # Anti-aliasing: blur suaviza los dientes de sierra en contornos curvos
-    mascara_crop = mascara_crop.filter(ImageFilter.GaussianBlur(radius=3))
-    diseno.putalpha(mascara_crop)
-
-    # 4. Pegar el diseño recortado sobre el trofeo en la posición correcta
-    trofeo.paste(diseno, (bb_x, bb_y), diseno)
-
-    return trofeo.convert("RGB")
+    fondo = Image.new("RGB", target, fondo_color)
+    offset_x = (target[0] - nuevo_ancho) // 2
+    offset_y = (target[1] - nuevo_alto)  // 2
+    fondo.paste(img_resized, (offset_x, offset_y))
+    return fondo

@@ -1748,3 +1748,282 @@ def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, di
     print(f"  → Spec: {ruta.name}")
 
     return conceptos, spec
+
+
+# ─── AGENTE 3 — Hormigón y Acero ─────────────────────────────────────────────
+
+PROMPT_B_HORMIGON_ACERO = """\
+Eres el director creativo de una fundición de galardones corporativos de alta gama.
+Tu trabajo: diseñar 6 propuestas de trofeo físico en Hormigón y Acero.
+
+Cada propuesta define:
+  1. La FORMA ESCULTÓRICA del objeto físico (qué silueta tiene el trofeo)
+  2. El TRATAMIENTO DE COLOR DE MARCA (cómo los colores corporativos aparecen en el material)
+  3. El TRATAMIENTO DE TEXTO en la superficie (cómo se integra el texto del premiado)
+
+FORMAS DISPONIBLES — asigna UNA diferente a cada propuesta:
+  "columnar"       → pilar vertical monolítico, proporción clásica de trofeo
+  "fragmentado"    → piezas de hormigón unidas con varillas de acero, tensión visual
+  "abstracto"      → curvas orgánicas de hormigón con aceros inclinados, libre
+  "tipografico"    → letra o símbolo enorme como cuerpo del trofeo
+  "arquitectonico" → planos y volúmenes geométricos, referencia estructural
+  "organico"       → forma biomorfa suave, como piedra de río tallada con venas de acero
+
+TRATAMIENTOS DE COLOR — cómo los colores de marca aparecen en el objeto:
+  "acero_pintado"      → elementos de acero lacados en el color primario de marca
+  "hormigon_pigmentado"→ masa de hormigón teñida con el color primario
+  "incrustacion_banda" → banda o panel de acero en color secundario atraviesa la forma
+  "oxidacion_acento"   → pátina industrial en tono del color de marca
+  "esmalte_parcial"    → esmalte industrial de color en zonas seleccionadas del hormigón
+
+TRATAMIENTOS DE TEXTO:
+  "grabado_bajo_relieve" → texto hundido en la superficie de hormigón
+  "letras_acero_aplique" → letras de acero cortadas aplicadas sobre la superficie
+  "serigrafía_industrial"→ texto impreso industrialmente sobre panel de acero
+  "fundido_en_masa"      → texto integrado en el molde del hormigón
+
+REGLAS DE UNICIDAD:
+  □ Cada propuesta debe usar una forma_escultorica diferente — no repitas formas
+  □ Varía los tratamientos de color y texto entre propuestas
+  □ Cada diseño debe sentirse como propuesto por una fundición diferente
+
+JERARQUÍA DEL TEXTO EN EL TROFEO (en este orden de importancia visual):
+  1. Nombre del premiado (recipient) — EL FOCO PRINCIPAL, tipografía más grande
+  2. Nombre del premio (headline)
+  3. Nombre de la organización (subtitle)
+
+Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
+
+[
+  {
+    "proposal_id": 1,
+    "pattern_name": "nombre evocador 2-3 palabras en español",
+    "design_rationale": "por qué esta forma y tratamiento encajan con la marca (1 frase)",
+    "forma_escultorica": "columnar|fragmentado|abstracto|tipografico|arquitectonico|organico",
+    "color_treatment": "acero_pintado|hormigon_pigmentado|incrustacion_banda|oxidacion_acento|esmalte_parcial",
+    "text_treatment": "grabado_bajo_relieve|letras_acero_aplique|serigrafía_industrial|fundido_en_masa",
+    "award_text": {
+      "headline": "nombre del premio exacto",
+      "recipient": "nombre del premiado exacto",
+      "subtitle": "nombre de la organización/empresa — NUNCA el organizador del evento"
+    }
+  },
+  { "proposal_id": 2, ... },
+  { "proposal_id": 3, ... },
+  { "proposal_id": 4, ... },
+  { "proposal_id": 5, ... },
+  { "proposal_id": 6, ... }
+]
+
+Responde SOLO con el JSON array.\
+"""
+
+_FORMAS_VALIDAS = {
+    "columnar", "fragmentado", "abstracto",
+    "tipografico", "arquitectonico", "organico",
+}
+_FORMAS_FALLBACK = list(_FORMAS_VALIDAS)
+
+
+def _llamada_design_concepts_hormigon_acero(
+    pedido: dict,
+    brand_analysis: dict,
+    canonical_palette: list | None = None,
+) -> list:
+    """Llamada B adaptada para Hormigón y Acero: genera formas escultóricas, no fondos DALL-E."""
+    award  = pedido.get("award", {})
+    evento = pedido.get("evento", {})
+
+    content = []
+
+    recipient_txt = award.get("recipient") or "Nombre del Premiado"
+    headline_txt  = award.get("headline")  or "Excellence Award"
+    subtitle_txt  = award.get("subtitle")  or "Sustain Awards"
+    fecha_line = f"\n- Fecha/Año: {award.get('fecha', '')}" if award.get("fecha") else ""
+
+    # Paleta canónica — inyectar colores como verdad absoluta
+    if canonical_palette:
+        _c0 = canonical_palette[0]
+        _c1 = canonical_palette[1] if len(canonical_palette) > 1 else canonical_palette[0]
+        content.append({"type": "text", "text": (
+            f"PALETA CANÓNICA DE MARCA:\n"
+            f"  Color primario  : {_c0}\n"
+            f"  Color secundario: {_c1}\n"
+            f"Estos colores deben guiar la elección de color_treatment en cada propuesta."
+        )})
+
+    content.append({"type": "text", "text": (
+        f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
+        f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text):\n"
+        f"- Nombre del premiado : {recipient_txt}\n"
+        f"- Nombre del premio   : {headline_txt}\n"
+        f"- Organización        : {subtitle_txt}\n"
+        f"{fecha_line}\n"
+        f"- Evento              : {evento.get('nombre', '')}\n\n"
+        "Genera los 6 conceptos con formas escultóricas distintas. "
+        "Usa EXACTAMENTE los textos indicados en award_text."
+    )})
+
+    resultado = _llamar_claude(
+        [{"role": "user", "content": content}],
+        PROMPT_B_HORMIGON_ACERO,
+        "DesignConceptsMaterial",
+        temperatura=TEMP_DESIGN_CONCEPTS,
+        model=MODEL_DESIGN_CONCEPTS,
+    )
+    return resultado if isinstance(resultado, list) else []
+
+
+def _validar_concepto_material(c: dict, idx: int,
+                               primary_color: str = "",
+                               secondary_color: str = "",
+                               colors_extended: list | None = None) -> dict:
+    """Valida y normaliza un concepto de Hormigón y Acero."""
+    c.setdefault("proposal_id", idx + 1)
+    c.setdefault("pattern_name", f"Propuesta {idx + 1}")
+    c.setdefault("design_rationale", "")
+    c.setdefault("color_treatment", "acero_pintado")
+    c.setdefault("text_treatment", "grabado_bajo_relieve")
+    c.setdefault("award_text", {})
+
+    # Garantizar forma válida; si Claude inventó un valor, asignar por índice
+    forma = c.get("forma_escultorica", "")
+    if forma not in _FORMAS_VALIDAS:
+        c["forma_escultorica"] = _FORMAS_FALLBACK[idx % len(_FORMAS_FALLBACK)]
+
+    # Propagar colores para uso en capa_imagen
+    if primary_color:
+        c["_primary"] = primary_color
+    if secondary_color:
+        c["_secondary"] = secondary_color
+    if colors_extended:
+        c["_colors_extended"] = [col for col in colors_extended if col]
+
+    return c
+
+
+def diseñar_desde_contexto_material(
+    pedido: dict,
+    brand_context: dict,
+    material_config: dict,
+) -> tuple[list, dict]:
+    """
+    Pipeline de Capa 1 para Agente 3 (materiales con forma dinámica).
+    Reutiliza Color Oracle y Brand Analysis del Agente 2.
+    Sustituye Design Concepts por generación de formas escultóricas.
+
+    Devuelve (conceptos[6], spec_completo).
+    """
+    id_pedido = pedido.get("id_pedido", "TEST")
+    material_nombre = material_config.get("nombre", "Material")
+
+    print(f"\n{'─'*50}")
+    print(f"  CAPA 1 · Agente 3 — {material_nombre}  [A:{MODEL_BRAND_ANALYSIS} / B:{MODEL_DESIGN_CONCEPTS}]")
+    print(f"  Pedido: {id_pedido}")
+    print(f"{'─'*50}")
+
+    # ── Color Oracle (idéntico al Agente 2) ──────────────────────────────────────
+    _tiene_brandbook    = bool(brand_context.get("pdf_resumen"))
+    _fc_saturated_count = brand_context.get("_fc_saturated_count", 0)
+    _fc_logo_confirmed  = brand_context.get("_fc_logo_confirmed", False)
+    _tiene_firecrawl    = bool(brand_context.get("canonical_palette")) and _fc_saturated_count >= 2
+
+    def _hue_dist(h1: str, h2: str) -> float:
+        import colorsys
+        def _hue(h):
+            try:
+                r, g, b = int(h[1:3], 16)/255, int(h[3:5], 16)/255, int(h[5:7], 16)/255
+                return colorsys.rgb_to_hsv(r, g, b)[0]
+            except Exception:
+                return 0.0
+        d = abs(_hue(h1) - _hue(h2))
+        return min(d, 1.0 - d)
+
+    if _tiene_brandbook:
+        brand_context["canonical_palette"] = []
+        print("  → Brandbook disponible — Color Oracle omitido")
+    elif not _tiene_firecrawl:
+        print("\n[0.5] Color Oracle (Haiku)...")
+        _canon = _llamada_color_oracle(brand_context)
+        if _canon:
+            brand_context["canonical_palette"] = _consolidar_hsv(_canon, max_grupos=3)
+            print(f"  → Oracle: {brand_context['canonical_palette']}")
+    else:
+        print(f"\n[0.5] Color Oracle omitido — Firecrawl OK: {brand_context.get('canonical_palette')}")
+
+    # ── Brand Analysis (idéntico al Agente 2) ────────────────────────────────────
+    print("\n[A] Brand Analysis...")
+    brand_analysis = _llamada_brand_analysis(pedido, brand_context)
+    colores = brand_analysis.get("colors", {})
+
+    # Override programático con canonical_palette
+    _canon_pal = brand_context.get("canonical_palette", [])
+    if _canon_pal:
+        colores["primary"]         = _canon_pal[0]
+        colores["secondary"]       = _canon_pal[1] if len(_canon_pal) >= 2 else colores.get("secondary")
+        colores["accent"]          = _canon_pal[2] if len(_canon_pal) >= 3 else colores.get("accent")
+        colores["colors_extended"] = _canon_pal[:]
+        brand_analysis["colors"]   = colores
+        print(f"  [OVERRIDE] canonical_palette: {_canon_pal}")
+
+    primary_col   = colores.get("primary", "")   or ""
+    secondary_col = colores.get("secondary", "") or ""
+    colors_ext    = colores.get("colors_extended", [])
+
+    # ── Design Concepts — Formas Escultóricas ────────────────────────────────────
+    print(f"\n[B] Design Concepts — Formas {material_nombre}...")
+    conceptos = _llamada_design_concepts_hormigon_acero(
+        pedido, brand_analysis, canonical_palette=_canon_pal
+    )
+    conceptos = [
+        _validar_concepto_material(c, i,
+                                   primary_color=primary_col,
+                                   secondary_color=secondary_col,
+                                   colors_extended=colors_ext)
+        for i, c in enumerate(conceptos[:6])
+    ]
+
+    # Garantizar unicidad de formas: si hay duplicados, asignar forma por índice
+    _formas_usadas: set[str] = set()
+    for i, c in enumerate(conceptos):
+        forma = c.get("forma_escultorica", "")
+        if forma in _formas_usadas:
+            for f in _FORMAS_FALLBACK:
+                if f not in _formas_usadas:
+                    c["forma_escultorica"] = f
+                    break
+        _formas_usadas.add(c.get("forma_escultorica", f"fallback_{i}"))
+
+    # Forzar textos del cliente si los proporcionó
+    _award_input = pedido.get("award", {})
+    _hl_fixed  = _award_input.get("headline", "").strip()
+    _rec_fixed = _award_input.get("recipient", "").strip()
+    _sub_fixed = _award_input.get("subtitle", "").strip()
+    if _hl_fixed or _rec_fixed or _sub_fixed:
+        for c in conceptos:
+            at = c.setdefault("award_text", {})
+            if _hl_fixed:  at["headline"]  = _hl_fixed
+            if _rec_fixed: at["recipient"] = _rec_fixed
+            if _sub_fixed: at["subtitle"]  = _sub_fixed
+
+    while len(conceptos) < 6:
+        conceptos.append(_validar_concepto_material(
+            {}, len(conceptos),
+            primary_color=primary_col,
+            secondary_color=secondary_col,
+            colors_extended=colors_ext,
+        ))
+
+    for c in conceptos:
+        print(f"  → P{c['proposal_id']}: {c['pattern_name']} [forma: {c.get('forma_escultorica','?')}]")
+
+    spec = {
+        "id_pedido":      id_pedido,
+        "material":       material_config.get("id", ""),
+        "brand_analysis": brand_analysis,
+        "design_concepts": conceptos,
+    }
+    ruta = guardar_spec(spec, id_pedido)
+    print(f"  → Spec: {ruta.name}")
+
+    return conceptos, spec

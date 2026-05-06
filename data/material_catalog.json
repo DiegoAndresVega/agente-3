@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "descripcion": "Materiales de trofeo para generación completa con IA — Agente 3",
+    "version": "1.0",
+    "nota": "A diferencia del Agente 2, no hay foto base. La forma del trofeo es generada por gpt-image-1."
+  },
+  "materiales": [
+    {
+      "id": "hormigon_acero",
+      "nombre": "Hormigón y Acero",
+      "grupo_generacion": 2,
+      "descripcion": "Formas escultóricas orgánicas en hormigón y acero. La IA genera la forma completa incluyendo texto integrado en la superficie.",
+      "precio_base": 180,
+      "dimensiones_output": {
+        "ancho": 1024,
+        "alto": 1536,
+        "aspecto": "portrait"
+      },
+      "prompt_material_base": "Award trophy made of concrete and steel. Studio product photography, white background, soft directional lighting. Concrete has visible aggregate texture. Steel elements are polished or brushed metal. Professional award photography style.",
+      "formas_esculturicas": [
+        {
+          "id": "columnar",
+          "nombre": "Columnar",
+          "descripcion_prompt": "Tall vertical column form, monolithic concrete block with steel base plate, clean geometric proportions"
+        },
+        {
+          "id": "fragmentado",
+          "nombre": "Fragmentado",
+          "descripcion_prompt": "Fragmented sculptural form, broken concrete pieces held together with steel pins or rods, dynamic tension"
+        },
+        {
+          "id": "abstracto",
+          "nombre": "Abstracto",
+          "descripcion_prompt": "Abstract sculptural shape, flowing concrete with steel inlay accents, organic curves meeting sharp edges"
+        },
+        {
+          "id": "tipografico",
+          "nombre": "Tipográfico",
+          "descripcion_prompt": "Oversized letterform or initial as the trophy body, concrete letter with steel backing plate"
+        },
+        {
+          "id": "arquitectonico",
+          "nombre": "Arquitectónico",
+          "descripcion_prompt": "Architectural trophy form, geometric planes and volumes, reminiscent of building facades or structural beams in concrete and steel"
+        },
+        {
+          "id": "organico",
+          "nombre": "Orgánico",
+          "descripcion_prompt": "Organic biomorphic form, smooth concrete curves like river stones or geological formations, steel accent veins"
+        }
+      ],
+      "restricciones_ia": {
+        "texto_en_imagen": true,
+        "descripcion": "El texto del premiado se integra en el prompt de imagen. gpt-image-1 genera texto con calidad suficiente para propuesta visual.",
+        "nota_calidad_texto": "Para producción final, el texto se graba físicamente. Este mockup muestra concepto de diseño.",
+        "colores_marca": "Los colores de marca se expresan como acento en elementos de acero, pintura industrial o incrustaciones pigmentadas en el hormigón."
+      }
+    }
+  ]
+}
