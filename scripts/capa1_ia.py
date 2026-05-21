@@ -26,7 +26,6 @@ from scripts.config import (
     MODEL_BRAND_ANALYSIS, TEMP_BRAND_ANALYSIS,
     MODEL_DESIGN_CONCEPTS, TEMP_DESIGN_CONCEPTS,
     MODEL_COLOR_ORACLE, TEMP_COLOR_ORACLE,
-    USE_FEW_SHOT, MAX_FEW_SHOT,
 )
 
 PROJECT_ROOT    = Path(__file__).resolve().parent.parent
@@ -184,458 +183,6 @@ JERARQUÍA DE FUENTES PARA COLOR (síguela en orden estricto):
 - typography.google_fonts_weights: siempre [400, 700] como mínimo.
 - Responde SOLO con el JSON.\
 """
-
-PROMPT_B_DESIGN_CONCEPTS = """\
-Eres el director creativo de una agencia premium de galardones corporativos.
-Tu trabajo: generar 6 conceptos de diseño radicalmente distintos para un trofeo/galardón.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESTRICCIONES TÉCNICAS DE IMPRESIÓN UV — SUSTAIN AWARDS (OBLIGATORIAS)
-Estos diseños se imprimen con UV sobre metal, madera o piedra. Las siguientes reglas
-son requisitos técnicos, no preferencias estéticas. Incumplirlas produce defectos físicos.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-RESTRICCIÓN 1 — FONDOS OSCUROS SÓLIDOS (CRÍTICO):
-  PROHIBIDO usar un fondo completamente negro o color sólido muy oscuro (#000000–#222222).
-  Los rellenos oscuros densos generan variación de textura en la tinta UV sobre metal.
-  PERMITIDO: gradientes oscuros (de muy oscuro a menos oscuro), fondos con profundidad visual.
-  P1 y P3 deben usar gradientes o texturas visuales, nunca un sólido plano negro.
-
-RESTRICCIÓN 2 — EFECTOS METÁLICOS (CRÍTICO):
-  PROHIBIDO describir en dalle_prompt: "metallic", "gold foil", "silver chrome", "reflective ink",
-  "brushed metal surface", "mirror finish" como si fueran tintas reales.
-  La impresión UV NO soporta tintas metálicas reales.
-  PERMITIDO: simular metálico con gradientes, highlights y patrones de luz — descríbelo así:
-  "gradient from gold-dark to bright gold with highlight strip" (simulación visual, no tinta).
-
-RESTRICCIÓN 3 — COLORES FLUORESCENTES:
-  PROHIBIDO: colores neón puros (rosa fluorescente, verde lima eléctrico, naranja UV).
-  USAR: equivalentes CMYK brillantes con saturación alta pero sin especificar "fluorescent".
-  Ejemplo: en lugar de "fluorescent yellow" → "vivid warm yellow #FFD700".
-
-RESTRICCIÓN 4 — MARGEN DE BORDES (5mm buffer):
-  Todos los elementos de texto, logo y decoración deben estar a mínimo 7% del borde del canvas.
-  Las decoraciones geométricas que lleguen al borde deben usar fade/gradiente hacia el extremo.
-  NUNCA líneas finas de alto contraste en el límite del canvas — las derivas de corte las rompen.
-
-RESTRICCIÓN 5 — FONDOS CLAROS = TRANSPARENTES:
-  Para P2 y P5 (bg_tone=light): el fondo blanco NO se imprime — la placa metálica del trofeo
-  ES el fondo. Esto es una ventaja: el metal da aspecto premium sin gastar tinta.
-  Diseña el texto y logo para que funcionen DIRECTAMENTE sobre metal plateado/dorado.
-  Usa colores de texto que contrasten bien con metal claro (azules oscuros, negros, primario oscuro).
-
-RESTRICCIÓN 6 — GRÁFICOS BOLD Y LEGIBLES:
-  Los detalles fotográficos muy finos no se reproducen correctamente en UV sobre metal/madera.
-  Usar: formas geométricas limpias, tipografía bold, bloques de color sólido, gradientes suaves.
-  EVITAR en dalle_prompt: "photographic detail", "fine grain texture", "intricate pattern".
-
-RESTRICCIÓN 7 — MATERIAL (el brief indicará el material exacto):
-  Metal/aluminio: UV funciona bien. Fondos claros o gradientes suaves dan mejor acabado que
-    fondos oscuros densos. Preferir diseños donde el metal sea parte del resultado visual.
-  Madera: SIN detalles fotográficos finos ni texturas de grano — la madera no los reproduce.
-    Solo gráficos bold, tipografía grande y legible, formas geométricas limpias.
-  Piedra: MÁXIMO 1-2 colores de tinta, diseño extremadamente simple, sin gradientes complejos.
-    El proceso es artesanal sobre zonas grabadas — no es impresión digital.
-  Grabado láser: NO especificar colores exactos en zonas de grabado —
-    el láser quema/oxida la superficie y el color final no es controlable.
-
-RESTRICCIÓN 8 — BORDES Y FRICCIÓN EN EMBALAJE:
-  Fondos oscuros o saturados full-bleed son vulnerables al astillado en bordes durante
-  embalaje y envío. Para diseños con fondos oscuros:
-  OBLIGATORIO: gradiente/fade que se desvanece en el perímetro exterior (último 8%).
-  PROHIBIDO: negro sólido o color saturado hasta el borde absoluto del canvas.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-MANDATO CREATIVO:
-Cada propuesta es un CONCEPTO VISUAL DISTINTO — no una variación de paleta, sino un lenguaje
-visual diferente. Piensa como si fueran 6 agencias distintas respondiendo al mismo brief.
-La jerarquía es siempre: Logo → Título → NOMBRE DEL PREMIADO (héroe) → Organización.
-El nombre del premiado es SIEMPRE el elemento tipográfico más grande y con mayor contraste.
-
-USO DE LA PALETA — jerarquía proporcional (el primario siempre domina):
-  Los colores tienen roles distintos, no son intercambiables ni equivalentes en peso visual.
-
-  CON 1 COLOR: el primario domina el 100% del espacio visual. Usa tints (primario + blanco)
-    y shades (primario + negro) para crear profundidad y contraste sin salir de la paleta.
-
-  CON 2 COLORES: el primario ocupa el 60-70% del peso visual del diseño.
-    El secundario aparece en MÁXIMO UN elemento estructural por diseño (una banda, un bloque
-    o un arco). No puede competir con el primario en superficie. Su función: contraste puntual.
-    EJEMPLO marca azul+amarillo: fondo azul + banda amarilla superior = el diseño.
-    EJEMPLO marca negro+naranja: fondo negro + bloque naranja lateral = el elemento central.
-
-  CON 3 COLORES: primario lidera en backgrounds y zonas grandes, secundario añade un
-    elemento estructural de contraste, acento aparece solo en detalles pequeños
-    (una línea fina, un ícono pequeño, un punto de luz). El acento NUNCA es un fondo.
-
-  El secundario/acento son importantes CUALITATIVAMENTE (sin ellos sería monocromático)
-  pero NO CUANTITATIVAMENTE en área visual.
-
-  - color_overlay.color: pon SIEMPRE el secundario o acento aquí (no el primario — ya es el fondo).
-  - Para el logo treatment "banda": usa secondary como band_color cuando el primario es el fondo.
-  - headline_color / recipient_color: varía entre primary, secondary y accent en los 6 conceptos.
-
-LIBERTAD CREATIVA TOTAL — CÓMO USAR LOS 6 SLOTS:
-  Cada slot tiene un ROL (propósito), no un archetype fijo. TÚ decides el layout,
-  la tipografía, la composición, el fondo y los elementos decorativos.
-  El sistema los ejecuta fielmente — no sobrescribe tus decisiones de diseño.
-
-  Layouts disponibles: "stacked" | "spread" | "staggered" | "billboard" | "logo_bottom"
-  Anchors: "top" | "center" | "bottom"
-  Alineaciones: "left" | "center" | "right"
-
-  CRITERIO DE CALIDAD: cada diseño debe verse como si lo hubiera creado una agencia diferente.
-  Usa layouts distintos, composiciones distintas, escalas distintas, decoraciones distintas.
-
-LOS 6 ROLES CREATIVOS (interprétalos con total libertad):
-
-  P1 — PRIMERA IMPRESIÓN IMPACTANTE
-    Rol: el diseño más memorable y reconocible de los 6. Debe detenerse en el ojo.
-    Puede ser: oscuro y sofisticado / brillante y audaz / minimalista extremo.
-    Criterio: si solo mostraras este diseño, ¿recordarías la marca y el premio?
-
-  P2 — CLARIDAD Y LEGIBILIDAD MÁXIMA
-    Rol: el diseño más legible y limpio. Prioriza contraste y jerarquía sobre decoración.
-    Ideal para: fondos claros con texto de marca de alto contraste, spacing generoso.
-    bg_tone=light → el fondo metálico del trofeo actúa como fondo (dalle_prompt="").
-    Recipient en el COLOR DE MARCA si contraste ≥ 3:1 sobre metal — editorial y potente.
-
-  P3 — TENSIÓN GRÁFICA Y ENERGÍA
-    Rol: diseño con movimiento visual y fuerza tipográfica. El más dinámico de los 6.
-    Elige una composición que genere tensión: asimétrica, diagonal, escala extrema.
-    layout="staggered" es una buena opción, pero no la única.
-
-  P4 — EL PREMIADO COMO PROTAGONISTA ABSOLUTO
-    Rol: el nombre del premiado ES el diseño. Todo lo demás es secundario.
-    layout="billboard" normalmente — el nombre ocupa la mayor parte del canvas.
-    El fondo puede ser DALLE con color de marca a plena potencia.
-
-  P5 — MINIMALISMO PREMIUM
-    Rol: el diseño más minimalista de los 6. Menos es más.
-    Espacio en blanco intencional. Tipografía como único elemento decorativo.
-    bg_tone=light → metálico del trofeo como fondo (dalle_prompt="").
-
-  P6 — IDENTIDAD DE MARCA PURA
-    Rol: la marca habla sola, con claridad y elegancia.
-    bg_tone=light o mid — el primario aparece como color de texto o banda, no como fondo oscuro.
-    El logo es el ancla visual. dalle_prompt="" o fondo muy sutil del color de marca.
-    Diseño limpio: mucho espacio, pocos elementos, el color de marca como acento.
-
-GARANTÍA DE UNICIDAD ENTRE LOS 6 CONCEPTOS — OBLIGATORIO:
-  Antes de escribir el JSON final, verifica CADA uno de estos puntos:
-  □ ¿bg_tone varía? DISTRIBUCIÓN OBLIGATORIA: P2=light, P5=light, P6=light o mid.
-    MÁXIMO 3 dark en total — solo entre P1, P3, P4. Nunca 4 o más dark.
-    Un conjunto con 4+ dark ES UN FALLO. P6 no puede ser dark por defecto.
-  □ ¿Usan layouts distintos? No repitas el mismo layout más de 2 veces.
-  □ ¿Las composiciones (left/center/right para recipient) varían?
-  □ ¿Las decoraciones son distintas entre sí?
-  □ ¿Los dalle_prompts usan técnicas radicalmente distintas? (nunca dos gradientes radiales)
-  □ ¿El recipient_uppercase varía? (al menos 2 conceptos en mayúsculas, 2 en minúsculas)
-  □ ¿Los spacing_scale varían? (denso 0.5–0.8 en algunos, aireado 1.4–2.0 en otros)
-  Si dos conceptos son similares → modifica el segundo hasta que sean claramente distintos.
-
-COLOR OVERLAY — tinta de coherencia cromática (USAR CON PRUDENCIA):
-  Propósito: añadir un velo muy sutil del color de marca sobre el fondo DALLE para cohesión.
-  - active=true SOLO si el fondo DALLE necesita anclarse cromáticamente a la marca.
-  - opacity MÁXIMA: 0.18 — por encima de eso destruye la creatividad del fondo generado.
-  - active=false en P2/P5 (fondos blancos — sin tinta) y en P1 si el fondo ya usa colores de marca.
-  - NUNCA uses opacity > 0.20 — el sistema lo recortará igualmente a 0.28 por seguridad.
-
-REGLAS DE COHERENCIA (aplicables a TODOS los conceptos):
-  1. Fondos distribuidos: al menos 2 oscuros, al menos 1 claro. Varía bg_tone entre conceptos.
-  2. Tratamiento de logo diferente en cada propuesta — no repitas el mismo en dos seguidas
-  3. En fondos CLAROS (P2, P5): usa el primario vivido de marca para el recipient si contraste ≥ 3:1
-     (texto grande). Para headline y subtitle: usa oscuro (#1A1A1A o equivalente).
-     PROHIBIDO para headline/subtitle: texto gris claro, colores luminosos sin contraste
-  4. En fondos OSCUROS (P1, P3, P4, P6): texto claro OBLIGATORIO (#FFFFFF, #FFD700, accent)
-     PROHIBIDO: texto gris medio, colores apagados
-  5. Recipient (nombre del premiado) = elemento tipográfico más grande en TODOS los conceptos
-     NUNCA: headline más grande que recipient
-
-CAMPO dalle_prompt — FONDO ARTÍSTICO CON PERSONALIDAD POR CONCEPTO:
-
-  REGLAS UNIVERSALES:
-  - En INGLÉS, retrato vertical (portrait)
-  - Describe ÚNICAMENTE el fondo — sin texto, sin logos, sin personas
-  - Termina SIEMPRE con: "No text, no logos, no people. Premium award background."
-  - dalle_prompt = "" → fondo transparente (metal del trofeo). Usar para bg_tone=light.
-  - Puedes usar DALLE para CUALQUIER slot, no solo P1/P3/P4. Si tienes una visión artística → exprésala.
-  - Los prompts DALLE DEBEN ser visualmente radicalmente distintos entre sí.
-    PROHIBIDO: repetir la misma técnica entre conceptos (ej. dos gradientes radiales).
-
-  PERSONALIDAD VISUAL POR CONCEPTO — OBLIGATORIO diferente técnica en cada uno:
-
-  P1 (IMPACTO DE MARCA) → El COLOR PRIMARIO de la marca ES el protagonista del fondo.
-    REGLA FUNDAMENTAL: usa el color primario exacto de la marca como base del fondo, NO un oscuro genérico.
-    El fondo debe ser INMEDIATAMENTE reconocible como el color de la marca.
-    Elige técnica según el primario:
-      primario saturado/vibrante (azul, verde, rojo, naranja) →
-        gradiente del primario claro al primario profundo — el mismo tono, con profundidad.
-        El secundario aparece como único acento luminoso (banda, glow puntual, borde).
-      primario oscuro/neutral (navy muy oscuro, negro, gris) →
-        gradiente oscuro profundo con acento del secundario como destello de color.
-        El secundario es el único punto de vida en el fondo.
-    PROHIBIDO: fondo oscuro genérico (negro, carbon, navy genérico) que no sea el color exacto de marca.
-    REGLA UV: nunca sólido plano puro — siempre gradiente o textura sutil que dé profundidad.
-
-  P3 (GRÁFICO AUDAZ) → El COLOR PRIMARIO como fondo + elemento geométrico ENORME del secundario.
-    El primario ES la base — no un oscuro genérico. Diseño gráfico puro, NOT fotografía.
-    REGLA bg_tone (OBLIGATORIA según luminancia del primario):
-      primario CÁLIDO/BRILLANTE (naranja, amarillo, rojo vibrante, verde lima) → bg_tone=mid
-        El color a plena saturación NO es "oscuro". Un naranja Amazon es bg_tone=mid, no dark.
-      primario OSCURO (azul navy, azul oscuro, verde oscuro, negro) → bg_tone=dark
-        Gradiente profundo del primario, con el secundario como destello.
-    Elige UNA técnica de composición:
-      primario saturado brillante → fondo pleno del primario + bloque o arco ENORME del secundario (30-50%)
-      primario oscuro saturado → gradiente del primario oscuro + elemento geométrico del secundario claro
-      marca con identidad fuerte → rectángulo o triángulo del secundario cortando el canvas en diagonal
-    El elemento geométrico ocupa 30-50% del canvas y usa el color secundario exacto.
-    NUNCA: base oscura genérica que no sea el color exacto de marca. NUNCA texturas etéreas.
-
-  P4 (BILLBOARD IMPACTO) → El fondo ES el color de marca. Energía máxima.
-    Técnicas por tono de marca:
-      lujo/premium → halftone dorado fino sobre el primario, gradiente oscuro-brillante
-      moderno/tech → gradiente explosivo del primario al secundario, partículas geométricas
-      colorido/lúdico (helados, moda) → el color de marca a PLENO VOLUMEN con textura bold:
-        acuarela densa en los tonos de marca, manchas de color superpuestas, fondo tipo cartel pop
-        ¡NO tengas miedo de fondos VIVOS y ALEGRES para marcas alegres!
-      deportivo → explosión radial del color primario, como un estadio encendido
-    RECUERDA: para marcas con colores VIBRANTES (rosa, amarillo, turquesa), un fondo saturado
-    y alegre ES la elección correcta. No lo oscurezcas artificialmente.
-
-  ESTRATEGIA DE COLOR ADAPTATIVA:
-  Marca FORMAL / LUJO / INSTITUCIONAL (brand_tone = formal|lujo|institucional):
-    P1 → gradiente muy oscuro con acento dorado o gris platino, luz especular elegante (nunca negro puro plano)
-    P3 → gradiente oscuro + geometría limpia y precisa, una sola forma contundente
-    P4 → halftone refinado, gradiente oscuro-a-profundo con el primario como acento vibrante
-
-  Marca TECNOLÓGICA / MODERNA / SOSTENIBLE (brand_tone = tecnologico|moderno|sostenible):
-    P1 → gradiente oscuro con velo azul-verde del primario, glow neón muy contenido
-    P3 → gradiente oscuro + grid o circuito abstracto en el accent, forma geométrica del primario
-    P4 → gradiente vibrante primario→secundario, energía digital
-
-  Marca DEPORTIVA / CULTURAL / CREATIVA / LÚDICA (brand_tone = deportivo|cultural|creativo):
-    P1 → oscuro fotográfico con destello del color de marca, textura rugosa
-    P3 → forma ENORME del color de marca (no temas usar rosa, amarillo, verde lima aquí)
-    P4 → color de marca A TOPE — acuarela, manchas, poster bold — ¡SÍ a los fondos alegres!
-
-REGLA CRÍTICA — subtitle:
-  El subtitle SIEMPRE es el nombre del cliente/empresa premiada (brand_name del análisis).
-  NUNCA escribas el nombre del organizador del evento ni ninguna marca de premios.
-
-REGLA CRÍTICA — contraste (INCUMPLIRLA hace el diseño ilegible):
-  - bg_tone=dark: recipient y headline en #FFFFFF, #FFD700 o accent muy claro.
-    NUNCA gris medio ni colores apagados sobre oscuro.
-  - bg_tone=light: recipient y headline en #000000, #1A1A1A o primario MUY OSCURO de marca.
-    PROHIBIDO en fondo claro: azul luminoso (#4FC3F7, #64B5F6), gris medio (#AAAAAA),
-    cualquier color con luminancia > 40% — quedan invisibles sobre blanco.
-  El contraste mínimo es 4.5:1 (WCAG AA).
-
-USO DEL LOGO — elige entre estas opciones, varía en cada propuesta:
-  - "blanco"    → logo remapeado a blanco, para fondos oscuros
-  - "negro"     → logo remapeado a negro, para fondos claros
-  - "color"     → colores originales, para fondos neutros/claros
-  - "watermark" → logo semitransparente centrado (opacity 0.12–0.20), profundidad sin ruido
-  - "banda"     → franja horizontal del primario, logo blanco sobre ella
-
-DIRECCIÓN TIPOGRÁFICA:
-  FUENTE: usa typography.google_fonts_name del análisis en los 6 conceptos.
-    P3 puede usar fuente condensada creativa si lo requiere el concepto.
-
-  JERARQUÍA (forzada por el sistema, solo orienta tus ratios):
-    recipient_size_ratio : 0.15–0.22  (siempre el mayor)
-    headline_size_ratio  : ~50% del recipient ratio elegido
-    subtitle_size_ratio  : ~23% del recipient ratio elegido
-
-  ALINEACIONES:
-    P1, P2, P4, P5, P6: todo centrado ("center")
-    P3 (staggered): headline="right", recipient="left", subtitle="right" — la asimetría es el diseño
-
-  MAYÚSCULAS:
-    recipient_uppercase: true → impacto (P3, P4 siempre; otros según marca)
-    recipient_uppercase: false → elegancia (P1, P2, P5, P6 por defecto)
-
-  ESPACIADO:
-    spacing_scale: 0.5 (denso/impactante) | 1.0 (estándar) | 1.8 (aireado/lujoso)
-
-CAMPO text_style.layout — distribución del texto en el canvas:
-  - "stacked"   → bloque compacto bajo el logo. Posición por text_anchor (top/center/bottom).
-  - "spread"    → headline arriba del canvas, recipient en el centro exacto, subtitle abajo.
-                  Gran espacio vacío entre zonas — efecto editorial premium.
-  - "staggered" → headline pequeño alineado DERECHA arriba, recipient ENORME alineado IZQUIERDA
-                  centro, subtitle DERECHA abajo. Tensión diagonal deliberada. Solo para P3.
-  - "billboard" → recipient domina el canvas, headline y subtitle como micro-captions. Solo P4.
-  PROHIBIDO: "vertical" (texto girado 90° — ilegible en objeto físico)
-  Distribución sugerida: P1=stacked, P2=spread, P3=staggered, P4=billboard, P5=spread, P6=stacked
-
-VARIEDAD OBLIGATORIA DE TEXTO — los 6 conceptos deben verse claramente distintos:
-  □ LAYOUTS: usa al menos 3 layouts distintos. Máximo 2 veces "stacked".
-  □ ANCHORS: varía text_anchor entre los 6 conceptos. Usa "top", "center" Y "bottom".
-    Ejemplo válido: P1=top, P2=center, P3=center, P4=center, P5=bottom, P6=center.
-    NO pongas "center" en los 6 — sería visualmente idéntico.
-  □ ALINEACIONES: varía recipient_alignment. No uses "center" en todos.
-    Al menos 2 conceptos con "left" o "right", resto "center".
-
-JERARQUÍA FIJA: recipient > headline > subtitle (siempre, en todos los conceptos)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VALIDACIÓN OBLIGATORIA — valida cada concepto contra estas reglas antes de escribir el JSON.
-Si alguna regla falla → corrige el concepto antes de incluirlo.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-REGLA 1 — LEGIBILIDAD (fallo crítico):
-  ¿Se lee todo el texto en 1 segundo? Si no → cambiar colores.
-  NUNCA color de texto similar al fondo. SIEMPRE contraste 4.5:1 mínimo.
-  Fondo oscuro → texto en blanco, crema o acento muy claro.
-  Fondo claro → texto en negro, gris muy oscuro o primario muy saturado/oscuro.
-  Un texto que no se lee en el diseño FINAL es inaceptable — cero excepciones.
-
-REGLA 2 — JERARQUÍA VISUAL OBLIGATORIA (en este orden, visible sin dudar):
-  1. Nombre del premio (headline) → debe leerse primero
-  2. Nombre del premiado (recipient) → EL FOCO PRINCIPAL — el más grande y contrastado
-  3. Marca/empresa (subtitle) → cierre visual
-  Los tres NO deben competir entre sí. recipient siempre domina por tamaño.
-
-REGLA 3 — CONSISTENCIA DE ESTILO (un único sistema visual por concepto):
-  Elige UN lenguaje: corporativo limpio, editorial, gráfico bold, tipográfico puro, etc.
-  PROHIBIDO mezclar en el mismo concepto: textura orgánica + grid técnico, serif clásico + neon,
-  minimalismo blanco + fondo con ruido agresivo.
-  Toda decisión (color, tipografía, decoración, fondo) debe pertenecer al mismo sistema.
-
-REGLA 4 — SIN DECORACIÓN ARBITRARIA:
-  decoration_hint: solo incluir un motif si cumple UNA función concreta:
-    - separar zonas de contenido (section_header, rule_grid)
-    - reforzar la identidad de la marca (diagonal_corners para marcas con lenguaje diagonal)
-    - añadir distinción premium al diseño (laurel_arc para galardones de excelencia)
-    - guiar el recorrido visual (dot_arc como conector entre headline y recipient)
-  Si el motif es simplemente decorativo sin función → usar "none".
-  PROHIBIDO: añadir puntos, líneas, o patrones que no cumplan ninguna de estas funciones.
-
-REGLA 5 — RITMO VERTICAL (sin grandes vacíos sin intención):
-  El canvas se divide en 3 bloques visuales:
-    BLOQUE SUPERIOR (0–35%): logo + headline
-    BLOQUE CENTRAL (35–70%): recipient — el foco principal
-    BLOQUE INFERIOR (70–100%): subtitle + fecha
-  El espacio vacío debe ser INTENCIONADO (diseño editorial, respiración de lujo).
-  PROHIBIDO: recipient flotando solo en mitad del canvas con el 60% restante vacío.
-  spacing_scale: 0.6–0.9 para diseños compactos, 1.2–1.8 para diseños editoriales aireados.
-
-REGLA 6 — FONDOS QUE SIRVEN AL TEXTO (no compiten):
-  El fondo debe ser SOPORTE del texto, no protagonista.
-  Si hay imagen o textura → debe ser sutil, oscurecer ligeramente la zona de texto si es necesario.
-  Un fondo que distrae del texto = fallo de diseño. Si hay duda → fondo sólido o gradiente suave.
-  bg_tone debe reflejar el fondo real elegido: "dark" si primario oscuro, "light" si claro/blanco.
-
-REGLA 7 — LOGO COMO ANCLA VISUAL (no residual):
-  El logo SIEMPRE tiene un tamaño visible y está alineado con la composición.
-  scale mínimo: 0.45. scale recomendado: 0.55–0.70.
-  position: "top_center" por defecto. "bottom_center" solo cuando el diseño lo requiere como cierre.
-  treatment apropiado según el fondo: "blanco" sobre oscuro, "negro" sobre claro, "color" sobre neutro.
-
-REGLA 8 — PERCEPCIÓN PREMIUM (producto de valor, no plantilla):
-  El diseño debe percibirse como un objeto de valor, no una tarjeta básica.
-  Introduce AL MENOS UNO de estos recursos en cada concepto:
-    - micro-contraste tipográfico (headline pequeño + recipient enorme → tensión de escala)
-    - línea fina editorial (separador de 1px entre zonas)
-    - profundidad visual (watermark del logo a 15% de opacidad, overlay sutil de color)
-    - tratamiento de color atrevido (color de marca como fondo o como texto hero)
-  Un diseño sin ninguno de estos recursos NO es premium.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
-
-[
-  {
-    "proposal_id": 1,
-    "pattern_name": "nombre evocador 2-3 palabras",
-    "design_rationale": "por qué este concepto encaja con la marca (1 frase)",
-    "dalle_prompt": "English — ONLY artistic background, NO text, NO logos...",
-    "bg_tone": "dark|light|mid",
-    "color_overlay": { "active": false, "color": "#HEX de marca", "opacity": 0.10 },
-    "logo": { "treatment": "blanco|negro|color|watermark|banda", "position": "top_center|top_left|top_right|center|bottom_center", "scale": 0.55, "opacity": 0.15, "band_color": "#HEX o null" },
-    "text_style": {
-      "text_anchor": "top|center|bottom",
-      "layout": "stacked|spread|staggered|billboard|vertical",
-      "font_family": "nombre exacto fuente de marca o null",
-      "recipient_color": "#HEX",
-      "headline_color": "#HEX",
-      "subtitle_color": "#HEX",
-      "recipient_size_ratio": 0.16,
-      "headline_size_ratio": 0.065,
-      "subtitle_size_ratio": 0.040,
-      "recipient_alignment": "left|center|right",
-      "headline_alignment": "left|center|right",
-      "subtitle_alignment": "left|center|right",
-      "recipient_uppercase": false,
-      "spacing_scale": 1.0
-    },
-    "award_text": { "headline": "nombre del premio", "recipient": "nombre del premiado", "subtitle": "nombre del cliente (brand_name) — NUNCA el nombre del organizador del evento" },
-    "decoration_hint": "SOLO si cumple una función (separar, enfatizar, guiar lectura, identidad de marca). Opciones: laurel_arc | diagonal_corners | section_header | badge_frame | corner_brackets | dot_arc | rule_grid | none. Si no cumple función clara → OBLIGATORIO poner none"
-  },
-  { "proposal_id": 2, ... },
-  { "proposal_id": 3, ... },
-  { "proposal_id": 4, ... },
-  { "proposal_id": 5, ... },
-  { "proposal_id": 6, "dalle_prompt": "", ... }
-]
-
-Responde SOLO con el JSON array.\
-"""
-
-
-# ─── Carga de ejemplos de aprendizaje ────────────────────────────────────────
-
-def _cargar_ejemplos_aprendizaje() -> list[dict]:
-    """
-    Carga ejemplos validados por el usuario.
-    - Ejemplos con dalle_prompt: imagen + JSON completo (nuevos)
-    - Ejemplos sin dalle_prompt: solo imagen (referencias visuales)
-
-    Límite recomendado: 15 imágenes máximo para controlar coste.
-    Cada imagen añade ~2.000 tokens al contexto (~$0.006 extra en Sonnet).
-    """
-    MAX_EJEMPLOS = MAX_FEW_SHOT
-    if not USE_FEW_SHOT or not APRENDIZAJE_DIR.exists():
-        return []
-
-    jsons = sorted(
-        APRENDIZAJE_DIR.glob("*.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True
-    )[:MAX_EJEMPLOS]
-
-    if not jsons:
-        return []
-
-    bloques = []
-    for json_path in jsons:
-        try:
-            with open(json_path, encoding="utf-8") as f:
-                brief = json.load(f)
-
-            img_path = json_path.with_suffix(".jpg")
-            if not img_path.exists():
-                img_path = json_path.with_suffix(".png")
-
-            if img_path.exists():
-                ext = img_path.suffix.lower()
-                mt  = "image/png" if ext == ".png" else "image/jpeg"
-                b64 = base64.standard_b64encode(img_path.read_bytes()).decode()
-                bloques.append({"type": "image",
-                                "source": {"type": "base64", "media_type": mt, "data": b64}})
-
-            # Solo incluir el JSON si es del nuevo formato (tiene dalle_prompt)
-            if "dalle_prompt" in brief:
-                bloques.append({
-                    "type": "text",
-                    "text": f"Brief validado:\n{json.dumps(brief, ensure_ascii=False, indent=2)}"
-                })
-
-        except Exception:
-            pass
-
-    return bloques
 
 
 # ─── Llamada genérica a Claude ────────────────────────────────────────────────
@@ -963,512 +510,6 @@ def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
     return resultado if isinstance(resultado, dict) else {}
 
 
-# ─── Vocabulario creativo aleatorio ──────────────────────────────────────────
-
-_ESTILOS_DALLE = [
-    # ── Cinematográfico / atmosférico ──
-    "dark cinematic film grain with diagonal golden light rays",
-    "foggy low-key atmospheric light with deep silhouette depth",
-    "dramatic chiaroscuro — extreme light-shadow contrast, dark renaissance",
-    "abstract light painting long exposure trails on near-black background",
-    "night photography bokeh light circles out of focus dark",
-    "deep atmospheric haze with single luminous color glow point",
-    "smoke diffusion in darkness with brand-color backlight",
-    # ── Editorial / impresión ──
-    "vintage newspaper halftone bold overprint grain texture",
-    "risograph two-color overprint misregister grain bold",
-    "editorial paper grain with deep ink wash accent marks",
-    "screen print silk bold flat color layers overlap texture",
-    "letterpress embossed uncoated paper deep press shadows",
-    "premium packaging matte board texture subtle emboss shadow",
-    "photocopier high contrast xerox grain texture bold marks",
-    # ── Geométrico / gráfico ──
-    "bold graphic flat color geometric poster — hard edges no gradients",
-    "swiss international style grid geometric lines dark background",
-    "constructivist bold shapes dynamic diagonals primary colors",
-    "art deco geometric gold radial linear pattern dark field",
-    "bauhaus primary color bold rectangles overlapping planes",
-    "memphis 1980s geometric squiggles bold flat color pattern",
-    "de stijl primary color bold grid asymmetric composition",
-    "suprematist floating geometric shapes black field abstract",
-    # ── Natural / orgánico ──
-    "stone marble dark mineral crystalline close-up texture",
-    "concrete brutalist surface directional deep shadow",
-    "volcanic rock dark crystalline formation angled light",
-    "deep forest floor organic texture bokeh background",
-    "aerial desert sand dunes abstract shadow ridges",
-    "weathered oxidized surface aged patina close-up",
-    "deep ocean abyss darkness faint luminescence",
-    # ── Digital / tecnología ──
-    "abstract data visualization glowing nodes dark network",
-    "aurora borealis flowing gradient dark polar sky",
-    "deep space nebula gradient star field distance",
-    "fiber optic threads glow dark background light",
-    "circuit board abstract trace paths dark field glow",
-    # ── Pictórico / arte ──
-    "hand-painted watercolor wet-on-wet pigment bloom washes",
-    "oil painting impasto thick texture abstract gestural",
-    "acrylic pour fluid art swirling colors dark base",
-    "abstract expressionist bold gestural brushstrokes dark",
-    "color field painting saturated zones flat hue boundaries",
-    "monotype print ink transfer ghost impression texture",
-    "ink calligraphy brushstroke motion blur dark paper",
-    # ── Material / lujo ──
-    "silk fabric draped dramatically motion deep shadow",
-    "deep velvet rich texture specular highlight fold",
-    "matte ceramic surface soft gradient light quiet",
-    "dark liquid surface refraction caustic light",
-    # ── Cultura / histórico ──
-    "japanese minimalist ink wash paper asymmetric",
-    "art nouveau ornamental organic curve botanical dark",
-    "pop art bold flat color Ben-Day halftone dots",
-    # ── Puro / minimal ──
-    "organic flowing curves soft gradient brand colors dark",
-    "deep rich gradient dark vignette premium depth",
-    "abstract minimal form negative space dark background",
-    # ── Brand-forward / vibrante — color de marca como protagonista ──
-    "bold flat color field in brand primary color — subtle texture, clean geometric depth, no dark overlay",
-    "vibrant brand-color gradient light-to-deep same hue, single dominant brand color, premium feel",
-    "brand primary color at full saturation with subtle halftone dot texture, vivid and clean",
-    "clean geometric color split — brand primary dominant field with accent color bold panel",
-    "solid brand color background, minimal light vignette from center, no darkness, brand identity",
-    "brand identity color block at full saturation — slight inner glow, no atmospheric darkness",
-]
-
-_MOTIFS_DECORATIVOS = [
-    "laurel_arc",
-    "diagonal_corners",
-    "section_header",
-    "badge_frame",
-    "corner_brackets",
-    "dot_arc",
-    "rule_grid",
-    "none",
-    "none",  # peso extra para evitar decoración innecesaria
-    "none",
-]
-
-_TRATAMIENTOS_TIPO = [
-    "ultra condensed bold display — maximum typographic impact",
-    "classic serif editorial contrast with sans details",
-    "letter-spaced minimal caps — luxury breathing room",
-    "mixed scale: giant recipient overshadowing micro-caption details",
-    "italic dynamic energy — forward momentum tension",
-    "monospaced technical precision — data-driven authority",
-    "rounded warm friendly — approachable premium",
-    "heavy slab serif impact — grounded institutional authority",
-    "extra light thin weight — restraint and luxury",
-    "bold wide tracking all-caps editorial statement",
-    "humanist warmth — balanced readable proportions",
-    "dramatic size contrast: headline whisper, recipient shout",
-]
-
-_PALETAS_MOOD = [
-    "full luminance range — pure black to brand primary highlight",
-    "monochromatic depth — single brand hue from near-black to shade",
-    "primary dominant with secondary spark accent",
-    "dark field with single luminous color focal point",
-    "muted desaturated base with vivid brand color pop",
-    "dual-tone split — primary half dark, secondary half richer",
-    "gradient span — dark through brand palette spectrum",
-    "high contrast — brand primary as only light source on black",
-]
-
-
-def _vocabulario_creativo_aleatorio(seed_hint: str = "", run_id: str = "") -> dict:
-    """
-    Vocabulario creativo único por run: estilos DALL-E, motifs, tipografía y paleta mood.
-    Seed a resolución de 30s + run_id garantiza variedad máxima entre ejecuciones.
-    """
-    import time
-    seed_str = f"{run_id}{seed_hint}{int(time.time() // 30)}"
-    seed_int = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-    rng = random.Random(seed_int)
-    return {
-        "estilos":      rng.sample(_ESTILOS_DALLE, min(6, len(_ESTILOS_DALLE))),
-        "motifs":       rng.sample(_MOTIFS_DECORATIVOS, min(6, len(_MOTIFS_DECORATIVOS))),
-        "tipograficos": rng.sample(_TRATAMIENTOS_TIPO, min(6, len(_TRATAMIENTOS_TIPO))),
-        "paletas":      rng.sample(_PALETAS_MOOD, min(6, len(_PALETAS_MOOD))),
-    }
-
-
-# ─── Llamada B — Design Concepts ─────────────────────────────────────────────
-
-def _llamada_design_concepts(pedido: dict, brand_analysis: dict,
-                             canonical_palette: list | None = None,
-                             has_brandbook: bool = False) -> list:
-    award  = pedido.get("award", {})
-    evento = pedido.get("evento", {})
-
-    ejemplos = _cargar_ejemplos_aprendizaje()
-    content  = []
-
-    # ── Semilla creativa generativa — run_id único garantiza variedad entre marcas ──
-    import uuid
-    run_id        = uuid.uuid4().hex[:10]
-    recipient_txt = award.get("recipient") or ""
-    vocab = _vocabulario_creativo_aleatorio(seed_hint=recipient_txt[:12], run_id=run_id)
-    semilla_txt = (
-        f"SEMILLA CREATIVA (run_id={run_id}) — garantiza unicidad entre ejecuciones.\n"
-        "Usa estas sugerencias como punto de partida, adaptándolas a la identidad de la marca.\n"
-        "Son inspiración, no mandatos — tu criterio creativo prevalece sobre ellas.\n\n"
-        f"  P1 → Sugerencia DALLE: \"{vocab['estilos'][0]}\" | Motif sugerido: \"{vocab['motifs'][0]}\" | Tipo: \"{vocab['tipograficos'][0]}\"\n"
-        f"  P2 → Motif sugerido: \"{vocab['motifs'][1]}\" | Tipo: \"{vocab['tipograficos'][1]}\"\n"
-        f"  P3 → Sugerencia DALLE: \"{vocab['estilos'][2]}\" | Motif sugerido: \"{vocab['motifs'][2]}\" | Tipo: \"{vocab['tipograficos'][2]}\"\n"
-        f"  P4 → Sugerencia DALLE: \"{vocab['estilos'][3]}\" | Motif sugerido: \"{vocab['motifs'][3]}\" | Tipo: \"{vocab['tipograficos'][3]}\"\n"
-        f"  P5 → Motif sugerido: \"{vocab['motifs'][4]}\" | Tipo: \"{vocab['tipograficos'][4]}\"\n"
-        f"  P6 → Sugerencia DALLE: \"{vocab['estilos'][5]}\" | Motif sugerido: \"{vocab['motifs'][5]}\" | Tipo: \"{vocab['tipograficos'][5]}\"\n\n"
-        "REGLA DE UNICIDAD: los dalle_prompts de P1, P3, P4, P6 deben usar técnicas visuales distintas entre sí.\n"
-        "Si una sugerencia no encaja con la marca, reemplázala por algo mejor para esa marca.\n"
-    )
-    # Almacenar run_id en el vocabulario para propagarlo a los conceptos
-    vocab["_run_id"] = run_id
-    content.insert(0, {"type": "text", "text": semilla_txt})
-
-    n_ejemplos = sum(1 for b in ejemplos if b.get("type") == "text")
-    n_imagenes = sum(1 for b in ejemplos if b.get("type") == "image")
-
-    if ejemplos:
-        print(f"  → {n_imagenes} imagen(es) de referencia, {n_ejemplos} brief(s) validado(s)")
-        content.append({"type": "text", "text": (
-            f"EJEMPLOS VALIDADOS POR EL USUARIO ({n_imagenes} referencias visuales):\n"
-            "Analiza estos diseños que han funcionado bien. Extrae patrones concretos:\n"
-            "  - Qué recurso visual define cada uno\n"
-            "  - Cómo se relacionan logo y texto\n"
-            "  - Qué makes them feel premium and professional\n"
-            "Aplica esos patrones (adaptados a la nueva marca) en tus propuestas.\n"
-            "Menciona en design_rationale qué aprendiste de estas referencias."
-        )})
-        content.extend(ejemplos)
-    else:
-        print("  → Sin ejemplos previos (primera generación)")
-
-    recipient_txt = award.get('recipient') or 'Nombre del Premiado'
-    headline_txt  = award.get('headline')  or 'Excellence Award'
-    subtitle_txt  = award.get('subtitle')  or 'Sustain Awards'
-    fecha_line = f"\n- Fecha/Año   : {award.get('fecha', '')}" if award.get("fecha") else ""
-    typo           = brand_analysis.get("typography", {})
-    google_font = typo.get("google_fonts_name")   # solo fuentes descargables
-    brand_tone  = brand_analysis.get("brand_tone", "institucional")
-
-    if google_font:
-        font_estrategia = (
-            f"ESTRATEGIA DE FUENTES — varía obligatoriamente entre propuestas:\n"
-            f"  P1: '{google_font}' — fuente de marca exacta, fidelidad total\n"
-            f"  P2: '{google_font}' — fuente de marca exacta, variante de layout\n"
-            f"  P3: fuente creativa/condensada que contraste con la marca — "
-            f"elige según brand_tone '{brand_tone}': "
-            f"institucional→'Barlow Condensed', moderno→'Exo 2', lujo→'Cormorant Garamond', "
-            f"sostenible→'Josefin Sans', tech→'Rajdhani'\n"
-            f"  P4: fuente display/impactante muy diferente — "
-            f"institucional→'Oswald', moderno→'Bebas Neue', lujo→'Playfair Display', "
-            f"sostenible→'Nunito', tech→'Orbitron'\n"
-            f"  P5: fuente editorial o experimental — "
-            f"institucional→'Libre Baskerville', moderno→'DM Serif Display', "
-            f"lujo→'Cormorant', sostenible→'Lora', tech→'Space Grotesk'\n"
-            f"  P6: '{google_font}' — vuelta a la marca con tratamiento distinto\n"
-            f"Escribe el nombre EXACTO de Google Fonts en font_family de cada propuesta."
-        )
-    else:
-        font_estrategia = (
-            f"ESTRATEGIA DE FUENTES — fuente de marca no disponible en Google Fonts:\n"
-            f"  P1, P2: null (usa fuente del sistema, fiel a la marca)\n"
-            f"  P3: fuente condensada creativa según brand_tone '{brand_tone}': "
-            f"institucional→'Barlow Condensed', moderno→'Exo 2', lujo→'Cormorant Garamond'\n"
-            f"  P4: fuente display impactante: institucional→'Oswald', moderno→'Bebas Neue', lujo→'Playfair Display'\n"
-            f"  P5: fuente editorial: institucional→'Libre Baskerville', moderno→'DM Serif Display', lujo→'Cormorant'\n"
-            f"  P6: null (fiel a la marca)"
-        )
-
-    content.append({"type": "text", "text": (
-        f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
-        f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text):\n"
-        f"- Nombre del premiado : {recipient_txt}\n"
-        f"- Nombre del premio   : {headline_txt}\n"
-        f"- Organización        : {subtitle_txt}\n"
-        f"{fecha_line}\n"
-        f"- Evento              : {evento.get('nombre', '')}\n\n"
-        f"{font_estrategia}\n\n"
-        "Genera los 6 conceptos. Incluye estos textos literalmente en award_text."
-    )})
-
-    # Inyectar restricciones del trofeo si están disponibles
-    trophy = pedido.get("_trophy", {})
-    if trophy:
-        constraints = trophy.get("constraints", {})
-        layouts_ok  = constraints.get("layouts_permitidos", [])
-        layouts_str = ", ".join(f'"{l}"' for l in layouts_ok) if layouts_ok else "todos"
-        margen_pct  = int(constraints.get("margen_h_pct", 0.08) * 100)
-        content.append({"type": "text", "text": (
-            f"RESTRICCIONES FÍSICAS DEL TROFEO — {trophy.get('nombre', '')} "
-            f"({trophy.get('ancho', '?')}×{trophy.get('alto', '?')}px · {trophy.get('material', '')}):\n"
-            f"  Forma: {constraints.get('descripcion_para_ia', 'rectangular estándar')}\n"
-            f"  Layouts PERMITIDOS: {layouts_str}\n"
-            f"  Margen horizontal MÍNIMO: {margen_pct}% (el renderer lo aplicará automáticamente)\n"
-            f"  ⚠ OBLIGATORIO: usar SOLO los layouts indicados. "
-            f"El sistema rechazará cualquier layout no permitido para este trofeo."
-        )})
-
-        # Restricción específica según material del trofeo
-        _material = trophy.get("material", "metal").lower()
-        _restriccion_material = {
-            "madera":    ("Solo gráficos bold y tipografía grande y legible. "
-                          "PROHIBIDO: fondos con texturas fotográficas, grano fino, detalles pequeños. "
-                          "La madera no reproduce detalles finos en impresión UV."),
-            "piedra":    ("MÁXIMO 1-2 colores de tinta. Diseño extremadamente simple. "
-                          "Sin gradientes complejos. El proceso es artesanal sobre zonas grabadas."),
-            "aluminio":  ("Fondos claros o gradientes suaves producen mejor acabado que fondos oscuros densos. "
-                          "Preferir diseños donde el metal plateado sea parte del resultado visual."),
-        }.get(_material,
-              "Fondos claros o gradientes suaves producen mejor resultado que fondos oscuros densos. "
-              "Evitar negro sólido puro — siempre con gradiente o profundidad visual.")
-        content.append({"type": "text", "text": (
-            f"RESTRICCIÓN DE MATERIAL — este trofeo es de {_material.upper()}:\n"
-            f"  {_restriccion_material}\n"
-            f"  Todos los diseños deben adaptarse a estas limitaciones físicas reales."
-        )})
-
-    # Restricción de paleta canónica.
-    # Fuente de verdad: canonical_palette (Firecrawl/Oracle) > colors_extended de Brand Analysis.
-    # Se aplica siempre que haya paleta canónica, independientemente del número de colores.
-    _ext = brand_analysis.get("colors", {}).get("colors_extended", [])
-    _palette_source = canonical_palette if canonical_palette else (_ext if _ext and len(_ext) <= 4 else [])
-    if _palette_source:
-        _pal_str = ", ".join(_palette_source)
-        _source_label = "FIRECRAWL/COLOR ORACLE" if canonical_palette else "BRAND ANALYSIS"
-        content.append({"type": "text", "text": (
-            f"PALETA OBLIGATORIA [{_source_label}] — RESTRICCIÓN ESTRICTA (no negociable para los 6 diseños):\n"
-            f"  Únicos colores de marca permitidos: {_pal_str}\n\n"
-            f"  PROHIBIDO en recipient_color, headline_color, color_overlay.color, band_color:\n"
-            f"    - Inventar variantes, tints o complementarios no incluidos en la lista\n"
-            f"    - Usar grises de marca o neutros como color de identidad\n"
-            f"    - Usar dorado (#FFD700, #F5C518, #D4AF37) si no aparece en la lista\n\n"
-            f"  PERMITIDO SIEMPRE: #FFFFFF y #1A1A1A como colores de texto para contraste.\n\n"
-            f"  OBJETIVO: los 6 diseños son variaciones del mismo sistema cromático.\n"
-            f"  La variedad viene de proporciones, layouts y fondos — NO de añadir colores nuevos."
-        )})
-
-    # Sin brandbook, el 3er color (accent) puede ser un CTA de la web, no identidad de marca.
-    # Instrucción: usarlo solo como detalle pequeño, nunca como fondo o banda dominante.
-    if len(_palette_source) == 3 and not has_brandbook:
-        _accent_warn = _palette_source[2]
-        content.append({"type": "text", "text": (
-            f"ADVERTENCIA — ACENTO SIN VALIDAR ({_accent_warn}):\n"
-            f"  Este tercer color proviene de la web (posiblemente un botón CTA), "
-            f"no de un brandbook validado. Puede NO ser identidad de marca consolidada.\n"
-            f"  ÚSALO CON MODERACIÓN: solo en detalles pequeños — una línea fina, un punto "
-            f"de luz, un pequeño ícono. NUNCA como fondo completo, banda principal o elemento "
-            f"que compita en área con el primario ({_palette_source[0]}) "
-            f"o el secundario ({_palette_source[1]}).\n"
-            f"  Los 6 diseños deben ser claramente dominados por {_palette_source[0]} y {_palette_source[1]}."
-        )})
-
-    resultado = _llamar_claude(
-        [{"role": "user", "content": content}],
-        PROMPT_B_DESIGN_CONCEPTS,
-        "DesignConcepts",
-        temperatura=TEMP_DESIGN_CONCEPTS,
-        model=MODEL_DESIGN_CONCEPTS,
-    )
-    # Propagar run_id a cada concepto para seed único en generadores PIL
-    _run_id = vocab.get("_run_id", "")
-    if isinstance(resultado, list) and _run_id:
-        for c in resultado:
-            if isinstance(c, dict):
-                c["_run_id"] = _run_id
-    return resultado if isinstance(resultado, list) else []
-
-
-# ─── Validación ───────────────────────────────────────────────────────────────
-
-def _validar_concepto(c: dict, idx: int, font_style_category: str = "",
-                      primary_color: str = "", secondary_color: str = "",
-                      accent_color: str = "", colors_extended: list | None = None,
-                      trophy_constraints: dict | None = None) -> dict:
-    # ── Parámetros FORZADOS — 6 arquetipos visuales distintos ──
-    # Claude controla colores, dalle_prompt y award_text; el sistema controla estructura.
-    # JERARQUÍA FIJA: recipient (100%) > headline (45-50%) > subtitle (22-25%)
-    _layouts  = ["stacked", "spread",  "staggered", "billboard","spread",  "stacked"]
-    _rec_sz   = [0.18,      0.22,      0.20,        0.22,       0.18,      0.16]
-    _hl_sz    = [0.090,     0.100,     0.082,       0.090,      0.085,     0.080]
-    _sub_sz   = [0.040,     0.048,     0.038,       0.042,      0.040,     0.037]
-    _spacing  = [1.2,       0.8,       0.6,         0.8,        1.0,       1.6]
-    _upper    = [False,     True,      True,        True,       False,     False]
-
-    # Seed de variedad por run: mismo slot distinto entre ejecuciones.
-    # _run_id cambia cada ejecución → seed diferente → variante de posición diferente.
-    import hashlib as _hlib
-    _vseed = int(_hlib.md5(
-        f"{c.get('_run_id', '')}{c.get('proposal_id', 1)}".encode()
-    ).hexdigest()[:6], 16)
-    _vi = _vseed % 4  # 4 variantes posibles de posicionamiento por slot
-
-    # Tablas de variedad: 4 filas (variantes) × 6 columnas (slots P1-P6)
-    # Las variantes rotan anchor y alineaciones para que cada ejecución sea distinta.
-    _ANCHOR_VAR = [
-        ["top",    "center", "center", "center", "top",    "center"],  # var 0 (base)
-        ["center", "top",    "center", "center", "bottom", "top"   ],  # var 1
-        ["top",    "center", "center", "center", "center", "bottom"],  # var 2
-        ["bottom", "top",    "center", "center", "top",    "center"],  # var 3
-    ]
-    _HL_ALN_VAR = [
-        ["left",   "center", "right",  "center", "right",  "center"],  # var 0
-        ["center", "left",   "right",  "center", "center", "left"  ],  # var 1
-        ["left",   "center", "right",  "center", "left",   "right" ],  # var 2
-        ["right",  "left",   "right",  "center", "right",  "center"],  # var 3
-    ]
-    _REC_ALN_VAR = [
-        ["left",   "center", "left",   "center", "right",  "center"],  # var 0
-        ["center", "left",   "left",   "center", "center", "right" ],  # var 1
-        ["left",   "right",  "left",   "center", "left",   "center"],  # var 2
-        ["right",  "center", "left",   "center", "right",  "left"  ],  # var 3
-    ]
-    _SUB_ALN_VAR = [
-        ["left",   "center", "right",  "center", "right",  "center"],  # var 0
-        ["center", "left",   "right",  "center", "center", "left"  ],  # var 1
-        ["left",   "center", "right",  "center", "left",   "right" ],  # var 2
-        ["right",  "left",   "right",  "center", "right",  "center"],  # var 3
-    ]
-    _anchors  = _ANCHOR_VAR [_vi]
-    _hl_alns  = _HL_ALN_VAR [_vi]
-    _rec_alns = _REC_ALN_VAR[_vi]
-    _sub_alns = _SUB_ALN_VAR[_vi]
-
-    # ── Defaults (solo se aplican si Claude no proporcionó el campo) ───────────
-    # Usar colores de marca como fallback; si no hay, usar blanco/gris neutro (nunca dorado fijo)
-    def _lum(h: str) -> float:
-        try:
-            h = h.lstrip("#")
-            return (int(h[0:2],16)*299 + int(h[2:4],16)*587 + int(h[4:6],16)*114) / (255000)
-        except Exception:
-            return 0.5
-
-    _light_brand = next(
-        (c for c in [accent_color, secondary_color] if c and len(c) == 7 and _lum(c) > 0.35),
-        "#FFFFFF"
-    )
-    _dark_brand = next(
-        (c for c in [secondary_color, accent_color] if c and len(c) == 7 and _lum(c) < 0.35),
-        "#1A1A1A"
-    )
-    _rec_cols = ["#FFFFFF", _light_brand, "#FFFFFF", _light_brand, "#FFFFFF", _dark_brand]
-    _hl_cols  = [_light_brand, _dark_brand, "#FFFFFF", "#E0E0E0", _light_brand, _dark_brand]
-    _sub_cols = ["#CCCCCC", "#888888", "#CCCCCC", "#AAAAAA", "#999999", "#888888"]
-
-    i6 = idx % 6
-
-    # Aplicar defaults para campos que Claude no generó
-    defaults = {
-        "proposal_id":      idx + 1,
-        "pattern_name":     f"Concepto {idx + 1}",
-        "design_rationale": "Diseño corporativo premium.",
-        "dalle_prompt":     "Soft abstract gradient background, warm neutral tones, subtle geometric shapes, premium clean. No text, no logos, no people. Premium award background.",
-        "bg_tone":          "mid",
-        "color_overlay":    {"active": False, "color": "#1A1A1A", "opacity": 0.15},
-        "logo":             {"treatment": "blanco", "position": "top_center", "scale": 0.55},
-        "text_style":       {
-            "font_family":          None,
-            "margin_h":             0.08,
-            "recipient_color":      _rec_cols[i6],
-            "headline_color":       _hl_cols[i6],
-            "subtitle_color":       _sub_cols[i6],
-        },
-        "award_text": {"headline": "Excellence Award", "recipient": "Nombre Apellido", "subtitle": "Organización"},
-    }
-    for k, v in defaults.items():
-        if k not in c or c[k] is None:
-            c[k] = v
-        elif isinstance(v, dict):
-            for sk, sv in v.items():
-                if sk not in c[k] or c[k][sk] is None:
-                    c[k][sk] = sv
-
-    # Aplicar la estructura tipográfica respetando propuestas válidas de Claude.
-    # Si Claude propuso un valor dentro del rango válido → preservarlo.
-    # Si Claude no propuso o el valor está fuera de rango → usar el default del slot.
-    ts = c.setdefault("text_style", {})
-
-    _VALID_LAYOUTS = {"stacked", "spread", "staggered", "billboard", "logo_bottom"}
-    _VALID_ANCHORS = {"top", "center", "bottom"}
-    _VALID_ALIGNS  = {"left", "center", "right"}
-
-    def _soft_str(field, default, valid_set):
-        v = ts.get(field)
-        return v if (v and v in valid_set) else default
-
-    def _soft_float(field, default, lo, hi):
-        try:
-            v = float(ts.get(field) or default)
-            return max(lo, min(hi, v))
-        except (TypeError, ValueError):
-            return default
-
-    ts["layout"]               = _soft_str("layout",    _layouts[i6], _VALID_LAYOUTS)
-    ts["text_anchor"]          = _soft_str("text_anchor", _anchors[i6], _VALID_ANCHORS)
-    ts["recipient_size_ratio"] = _soft_float("recipient_size_ratio", _rec_sz[i6],  0.10, 0.28)
-    ts["headline_size_ratio"]  = _soft_float("headline_size_ratio",  _hl_sz[i6],   0.050, 0.14)
-    ts["subtitle_size_ratio"]  = _soft_float("subtitle_size_ratio",  _sub_sz[i6],  0.025, 0.065)
-    ts["spacing_scale"]        = _soft_float("spacing_scale",        _spacing[i6], 0.5, 2.5)
-    ts["recipient_uppercase"]  = ts.get("recipient_uppercase") if ts.get("recipient_uppercase") is not None else _upper[i6]
-    ts["recipient_alignment"]  = _soft_str("recipient_alignment", _rec_alns[i6], _VALID_ALIGNS)
-    ts["headline_alignment"]   = _soft_str("headline_alignment",  _hl_alns[i6],  _VALID_ALIGNS)
-    ts["subtitle_alignment"]   = _soft_str("subtitle_alignment",  _sub_alns[i6],  _VALID_ALIGNS)
-
-    # Validar layout contra los permitidos por el trofeo
-    if trophy_constraints:
-        layouts_ok = trophy_constraints.get("layouts_permitidos", [])
-        if layouts_ok and ts.get("layout") not in layouts_ok:
-            ts["layout"] = layouts_ok[i6 % len(layouts_ok)]
-
-    # Propagar categoría de estilo tipográfico al renderer para fallback inteligente
-    if font_style_category:
-        ts["font_style_category"] = font_style_category
-
-    # Propagar colores de marca — renderer y generadores PIL los usan como
-    # elementos estructurales, bandas, meshes y paletas de variedad.
-    # _primary es crítico para que generar_fondo() inyecte el HEX exacto en el prompt DALL-E.
-    if primary_color:
-        c["_primary"] = primary_color
-    if secondary_color:
-        c["_secondary"] = secondary_color
-    if accent_color:
-        c["_accent"] = accent_color
-    if colors_extended:
-        c["_colors_extended"] = [col for col in colors_extended if col]
-
-    # Garantía de no colisión logo–texto:
-    # - "center" solo permitido para watermark (semi-transparente, intencional)
-    # - cualquier logo opaco en "center" se mueve a top_center
-    logo = c.setdefault("logo", {})
-    if logo.get("position") == "center" and logo.get("treatment") != "watermark":
-        logo["position"] = "top_center"
-
-    # Preservar decoration_hint de Claude; si no viene, asignar "none"
-    if "decoration_hint" not in c or not c["decoration_hint"]:
-        c["decoration_hint"] = "none"
-
-    # Eliminar motifs puramente decorativos sin función visual definida.
-    # starburst y halftone_overlay son los más propensos a ser arbitrarios.
-    _MOTIFS_FUNCIONALES = {
-        "laurel_arc", "diagonal_corners", "section_header",
-        "badge_frame", "corner_brackets", "dot_arc", "rule_grid", "none", "auto",
-    }
-    if c.get("decoration_hint") not in _MOTIFS_FUNCIONALES:
-        c["decoration_hint"] = "none"
-
-    # Garantizar escala mínima del logo — no puede ser residual
-    logo = c.setdefault("logo", {})
-    if float(logo.get("scale", 0.55)) < 0.45:
-        logo["scale"] = 0.45
-
-    # Garantizar spacing_scale mínimo de 0.5 — sin canvas casi vacío
-    ts = c.setdefault("text_style", {})
-    if float(ts.get("spacing_scale", 1.0)) < 0.5:
-        ts["spacing_scale"] = 0.5
-
-    return c
-
-
 # ─── Guardado ─────────────────────────────────────────────────────────────────
 
 def guardar_spec(spec: dict, id_pedido: str) -> Path:
@@ -1479,390 +520,182 @@ def guardar_spec(spec: dict, id_pedido: str) -> Path:
     return ruta
 
 
-# ─── Sanitizador de dalle_prompt ──────────────────────────────────────────────
-
-def _sanitizar_dalle_prompt(prompt: str, bg_tone: str) -> str:
-    """
-    Reemplaza vocabulario oscuro en dalle_prompt cuando bg_tone es mid o light.
-    DALL-E genera fondos oscuros si el prompt los describe, independientemente
-    de bg_tone. Esta función alinea el texto del prompt con el tono deseado.
-    Solo actúa para bg_tone in ("mid", "light"). Los reemplazos son word-boundary
-    para evitar sustituir partes de palabras (ej: "dark red" → "vivid red").
-    """
-    if bg_tone not in ("mid", "light"):
-        return prompt
-    import re
-    _reemplazos = [
-        (r'\bdark background\b',  'vivid saturated background'),
-        (r'\bdarkened\b',         'saturated'),
-        (r'\bdark tones?\b',      'brand tones'),
-        (r'\bdark\b',             'vivid'),
-        (r'\bblack\b',            'deep brand-colored'),
-        (r'\bcarbon\b',           'saturated'),
-        (r'\bmidnight\b',         'bold'),
-        (r'\bobsidian\b',         'vivid'),
-        (r'\bshadow\b',           'accent'),
-        (r'\bcharcoal\b',         'saturated'),
-        (r'\bdim\b',              'bright'),
-        (r'\bmoody\b',            'energetic'),
-        (r'\bnoir\b',             'bold'),
-        (r'\bgloomy\b',           'atmospheric'),
-        (r'\bdusk\b',             'golden hour'),
-    ]
-    result = prompt
-    for pattern, replacement in _reemplazos:
-        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
-    return result
-
-
-# ─── Pipeline principal ───────────────────────────────────────────────────────
-
-def diseñar_desde_contexto(pedido: dict, brand_context: dict) -> tuple[list, dict]:
-    """
-    Pipeline de Capa 1: 2 llamadas a Claude.
-    Devuelve (conceptos[6], spec_completo).
-    """
-    id_pedido = pedido.get("id_pedido", "TEST")
-
-    print(f"\n{'─'*50}")
-    print(f"  CAPA 1 · Agente Diseñador IA  [A:{MODEL_BRAND_ANALYSIS} / B:{MODEL_DESIGN_CONCEPTS}]")
-    print(f"  Pedido: {id_pedido}")
-    print(f"{'─'*50}")
-
-    # ── Color Oracle: paleta canónica antes del análisis completo ────────────────
-    # Prioridad:
-    #   (1) Brandbook PDF → skip Oracle
-    #   (2) Firecrawl confirmó logo_color + ≥1 saturado → skip Oracle
-    #       El logo es la fuente más fiable; añadir secundarios del screenshot introduce ruido.
-    #   (3) Firecrawl encontró 2+ colores sin logo confirmado → Oracle valida el primario
-    #       Si el primario de Oracle difiere >40° del de Firecrawl, Oracle gana.
-    #   (4) Firecrawl insuficiente o sin URL → Oracle como fuente principal
-    _tiene_brandbook    = bool(brand_context.get("pdf_resumen"))
-    _fc_saturated_count = brand_context.get("_fc_saturated_count", 0)
-    _fc_logo_confirmed  = brand_context.get("_fc_logo_confirmed", False)
-    _tiene_firecrawl    = bool(brand_context.get("canonical_palette")) and _fc_saturated_count >= 2
-
-    def _hue_dist(h1: str, h2: str) -> float:
-        import colorsys
-        def _hue(h):
-            try:
-                r, g, b = int(h[1:3], 16)/255, int(h[3:5], 16)/255, int(h[5:7], 16)/255
-                return colorsys.rgb_to_hsv(r, g, b)[0]
-            except Exception:
-                return 0.0
-        d = abs(_hue(h1) - _hue(h2))
-        return min(d, 1.0 - d)
-
-    if _tiene_brandbook:
-        brand_context["canonical_palette"] = []
-        print("  → Brandbook disponible — Color Oracle omitido")
-
-    elif _fc_logo_confirmed and _fc_saturated_count >= 1:
-        # Firecrawl devolvió logo_color, pero puede ser una alucinación (ej: Apple → verde).
-        # Si tenemos el logo real, Oracle lo valida contra los píxeles del logo.
-        # Sin logo → confiar en Firecrawl (no hay forma de verificar).
-        _tiene_logo_fc = bool(brand_context.get("logo_path"))
-        if _tiene_logo_fc:
-            print(f"\n[0.5] Color Oracle (validador logo) — verificando logo_color Firecrawl={brand_context['canonical_palette'][0]}...")
-            _canon_fc_val = _llamada_color_oracle(brand_context)
-            if _canon_fc_val:
-                _fc_prim  = brand_context["canonical_palette"][0]
-                _ora_prim = _canon_fc_val[0]
-                _dist_fc  = _hue_dist(_fc_prim, _ora_prim)
-                if _dist_fc > 0.11:
-                    brand_context["canonical_palette"] = _consolidar_hsv(_canon_fc_val, max_grupos=3)
-                    print(f"  [Oracle] logo_color Firecrawl={_fc_prim} ≠ logo real ({_ora_prim}, Δ={_dist_fc:.2f}) → Oracle corrige")
-                else:
-                    print(f"  [Oracle] logo_color confirmado: {_fc_prim} ≈ {_ora_prim} (Δ={_dist_fc:.2f}) → Firecrawl válido")
-            else:
-                print(f"  [Oracle] Sin resultado — Firecrawl respetado: {brand_context['canonical_palette']}")
-        else:
-            print(f"\n[0.5] Color Oracle: omitido — logo_color Firecrawl sin logo para validar: {brand_context['canonical_palette']}")
-
-    elif _tiene_firecrawl:
-        # Firecrawl 2+ colores pero sin logo_color confirmado → Oracle valida el primario
-        _tiene_logo = bool(brand_context.get("logo_path"))
-        if _tiene_logo:
-            print(f"\n[0.5] Color Oracle (validador) — verificando primario de Firecrawl contra logo...")
-            _canon_val = _llamada_color_oracle(brand_context)
-            if _canon_val:
-                _fc_primary  = brand_context["canonical_palette"][0]
-                _ora_primary = _canon_val[0]
-                _dist = _hue_dist(_fc_primary, _ora_primary)
-                if _dist > 0.11:  # >40° → el primario de Firecrawl es dudoso, Oracle corrige
-                    brand_context["canonical_palette"] = _consolidar_hsv(_canon_val, max_grupos=3)
-                    print(f"  [Oracle] Primario Firecrawl={_fc_primary} difiere del logo ({_ora_primary}, Δ={_dist:.2f}) → Oracle gana")
-                else:
-                    print(f"  [Oracle] Primario confirmado: {_fc_primary} ≈ {_ora_primary} (Δ={_dist:.2f}) → Firecrawl respetado")
-            else:
-                print(f"  [Oracle] Sin resultado — Firecrawl respetado: {brand_context['canonical_palette']}")
-        else:
-            print(f"\n[0.5] Color Oracle: omitido — Firecrawl identificó {_fc_saturated_count} colores (sin logo): {brand_context['canonical_palette']}")
-
-    else:
-        # Firecrawl insuficiente o sin URL → Oracle como fuente principal
-        if brand_context.get("canonical_palette"):
-            print(f"\n[0.5] Color Oracle (Haiku) — Firecrawl insuficiente ({_fc_saturated_count} saturados), completando...")
-        else:
-            print("\n[0.5] Color Oracle (Haiku)...")
-        _canon = _llamada_color_oracle(brand_context)
-        _fc_existente = brand_context.get("canonical_palette", [])
-        if _fc_existente and _canon:
-            _raw_merged = _fc_existente + [c for c in _canon if c not in _fc_existente]
-            _merged = _consolidar_hsv(_raw_merged, max_grupos=3)
-            brand_context["canonical_palette"] = _merged
-            print(f"  → Paleta completada (Firecrawl + Oracle): {_merged}")
-        elif _canon:
-            brand_context["canonical_palette"] = _consolidar_hsv(_canon, max_grupos=3)
-            print(f"  → Oracle: {brand_context['canonical_palette']}")
-        else:
-            print("  → Sin resultado — Brand Analysis usará todas las fuentes disponibles")
-
-    print("\n[A] Brand Analysis...")
-    brand_analysis = _llamada_brand_analysis(pedido, brand_context)
-    colores = brand_analysis.get("colors", {})
-    print(f"  → Tono   : {brand_analysis.get('brand_tone', '—')}")
-    print(f"  → Primary: {colores.get('primary', '—')}")
-
-    # Diagnóstico: ¿Brand Analysis respetó la paleta canónica enviada?
-    _canon_enviada = brand_context.get("canonical_palette", [])
-    _ext_resultado = colores.get("colors_extended", [])
-    if _canon_enviada and _ext_resultado:
-        _respetada = (all(c in _ext_resultado for c in _canon_enviada)
-                      and len(_ext_resultado) <= len(_canon_enviada) + 1)
-        _estado = "✓ RESPETADA" if _respetada else "⚠ DIVERGENCIA"
-        print(f"  → Paleta canónica  : {_estado}")
-        print(f"    Enviada al modelo: {_canon_enviada}")
-        print(f"    Colors_extended  : {_ext_resultado}")
-    elif _ext_resultado:
-        print(f"  → Colors_extended  : {_ext_resultado}")
-
-    # Override programático: si hay canonical_palette, los colores de marca son no negociables.
-    # El LLM puede divergir creativamente — el código garantiza que la paleta real siempre gana.
-    _canon_pal = brand_context.get("canonical_palette", [])
-    if _canon_pal:
-        colores["primary"]         = _canon_pal[0]
-        colores["secondary"]       = _canon_pal[1] if len(_canon_pal) >= 2 else colores.get("secondary")
-        colores["accent"]          = _canon_pal[2] if len(_canon_pal) >= 3 else colores.get("accent")
-        colores["colors_extended"] = _canon_pal[:]
-        brand_analysis["colors"]   = colores
-        print(f"  [OVERRIDE] canonical_palette aplicada forzosamente: {_canon_pal}")
-        print(f"  [OVERRIDE] primary={colores['primary']} · secondary={colores.get('secondary','—')} · accent={colores.get('accent','—')}")
-
-    n_aprendizaje = len(list(APRENDIZAJE_DIR.glob("*.json"))) if APRENDIZAJE_DIR.exists() else 0
-    typo = brand_analysis.get("typography", {})
-    style_cat = typo.get("font_style_category", "")
-    print(f"  → Fuente  : {typo.get('google_fonts_name', '—')} [{style_cat or '?'}]")
-
-    secondary_col   = colores.get("secondary", "") or ""
-    accent_col      = colores.get("accent", "")    or ""
-    colors_extended = colores.get("colors_extended", [])
-
-    print(f"\n[B] Design Concepts (ejemplos acumulados: {n_aprendizaje})...")
-    trophy_constraints = pedido.get("_trophy", {}).get("constraints", {})
-    _canon_pal   = brand_context.get("canonical_palette") or []
-    primary_col  = colores.get("primary", "") or ""
-    _has_brandbook = bool(brand_context.get("pdf_resumen"))
-    conceptos = _llamada_design_concepts(pedido, brand_analysis, canonical_palette=_canon_pal,
-                                         has_brandbook=_has_brandbook)
-    conceptos = [_validar_concepto(c, i, style_cat,
-                                   primary_color=primary_col,
-                                   secondary_color=secondary_col,
-                                   accent_color=accent_col,
-                                   colors_extended=colors_extended,
-                                   trophy_constraints=trophy_constraints)
-                 for i, c in enumerate(conceptos[:6])]
-
-    # Forzar textos del cliente si los proporcionó — no dejar que la IA los cambie
-    _award_input = pedido.get("award", {})
-    _hl_fixed  = _award_input.get("headline", "").strip()
-    _rec_fixed = _award_input.get("recipient", "").strip()
-    _sub_fixed = _award_input.get("subtitle", "").strip()
-    if _hl_fixed or _rec_fixed or _sub_fixed:
-        for c in conceptos:
-            at = c.setdefault("award_text", {})
-            if _hl_fixed:  at["headline"]  = _hl_fixed
-            if _rec_fixed: at["recipient"] = _rec_fixed
-            if _sub_fixed: at["subtitle"]  = _sub_fixed
-
-    # Garantía dura: máximo 3 fondos oscuros. Convierte los extras a "mid" (P6 → P4 → P3).
-    _dark_ids = [c["proposal_id"] for c in conceptos if c.get("bg_tone") == "dark"]
-    if len(_dark_ids) > 3:
-        _convert_priority = [6, 4, 3, 1]
-        for _pid in _convert_priority:
-            if len(_dark_ids) <= 3:
-                break
-            for c in conceptos:
-                if c["proposal_id"] == _pid and c.get("bg_tone") == "dark":
-                    c["bg_tone"] = "mid"
-                    _dark_ids.remove(_pid)
-                    print(f"  [postproceso] P{_pid}: dark→mid (límite 3 fondos oscuros)")
-                    break
-
-    # Primario cálido/brillante + bg_tone=dark en P3/P4 = inconsistencia de marca.
-    # Un naranja, amarillo o rojo vibrante a plena potencia no es un fondo oscuro.
-    # Convertir P3 y P4 a "mid" cuando el primario tiene alta luminancia.
-    def _luminancia(hex_c: str) -> float:
-        try:
-            h = hex_c.lstrip("#")
-            return (int(h[0:2],16)*299 + int(h[2:4],16)*587 + int(h[4:6],16)*114) / (255*1000)
-        except Exception:
-            return 0.5
-
-    _prim_lum = _luminancia(primary_col)
-    if _prim_lum > 0.38:   # naranja #FF9900≈0.49, rojo #C9102D≈0.19, azul≈0.20, amarillo≈0.85
-        for c in conceptos:
-            if c.get("bg_tone") == "dark" and c.get("proposal_id") in (3, 4):
-                c["bg_tone"] = "mid"
-                print(f"  [postproceso] P{c['proposal_id']}: dark→mid (primario cálido {primary_col} lum={_prim_lum:.2f})")
-
-    # Sanitizar dalle_prompt para que el vocabulario coincida con bg_tone resultante.
-    # DALL-E ignora bg_tone; si el prompt describe escenas oscuras para una propuesta mid/light
-    # se generará un fondo oscuro igualmente. Este sanitizador reemplaza términos oscuros
-    # por equivalentes de tono medio sin alterar la creatividad del diseño.
-    for c in conceptos:
-        _dp = c.get("dalle_prompt", "")
-        if _dp and c.get("bg_tone") in ("mid", "light"):
-            _dp_nuevo = _sanitizar_dalle_prompt(_dp, c["bg_tone"])
-            if _dp_nuevo != _dp:
-                c["dalle_prompt"] = _dp_nuevo
-                print(f"  [postproceso] P{c['proposal_id']}: dalle_prompt sanitizado (bg={c['bg_tone']})")
-
-    while len(conceptos) < 6:
-        conceptos.append(_validar_concepto({}, len(conceptos), style_cat,
-                                           primary_color=primary_col,
-                                           secondary_color=secondary_col,
-                                           accent_color=accent_col,
-                                           colors_extended=colors_extended,
-                                           trophy_constraints=trophy_constraints))
-
-    for c in conceptos:
-        print(f"  → P{c['proposal_id']}: {c['pattern_name']} [{c.get('bg_tone','?')}]")
-
-    spec = {
-        "id_pedido":      id_pedido,
-        "brand_analysis": brand_analysis,
-        "design_concepts": conceptos,
-    }
-    ruta = guardar_spec(spec, id_pedido)
-    print(f"  → Spec: {ruta.name}")
-
-    return conceptos, spec
-
-
-# ─── AGENTE 3 — Hormigón y Acero ─────────────────────────────────────────────
+# ─── Agente 3 — Hormigón y Acero (monolito) ──────────────────────────────────
 
 PROMPT_B_HORMIGON_ACERO = """\
-Eres el director creativo de una fundición de galardones corporativos de alta gama.
-Tu trabajo: diseñar 6 propuestas de trofeo físico en Hormigón y Acero.
+Eres el director creativo de un estudio de galardones corporativos de alta gama especializado
+en escultura monolítica de hormigón. Tu trabajo: diseñar 3 propuestas de trofeo físico.
 
-Cada propuesta define:
-  1. La FORMA ESCULTÓRICA del objeto físico (qué silueta tiene el trofeo)
-  2. El TRATAMIENTO DE COLOR DE MARCA (cómo los colores corporativos aparecen en el material)
-  3. El TRATAMIENTO DE TEXTO en la superficie (cómo se integra el texto del premiado)
+━━━ PRINCIPIO DE DISEÑO — MONOLITO DE HORMIGÓN ━━━
+Cada trofeo es un bloque único de hormigón: un solo volumen continuo, sin piezas ensambladas,
+sin acero, sin color añadido. La identidad y la creatividad se expresan EXCLUSIVAMENTE mediante:
+  • La FORMA del volumen (silueta, proporciones, geometría)
+  • Los GRABADOS EN PROFUNDIDAD (relieves, incisiones, letras cinceladas, motivos en bajorrelieve)
 
-FORMAS DISPONIBLES — asigna UNA diferente a cada propuesta:
-  "columnar"       → pilar vertical monolítico, proporción clásica de trofeo
-  "fragmentado"    → piezas de hormigón unidas con varillas de acero, tensión visual
-  "abstracto"      → curvas orgánicas de hormigón con aceros inclinados, libre
-  "tipografico"    → letra o símbolo enorme como cuerpo del trofeo
-  "arquitectonico" → planos y volúmenes geométricos, referencia estructural
-  "organico"       → forma biomorfa suave, como piedra de río tallada con venas de acero
+━━━ PRINCIPIO — LA FORMA Y EL GRABADO NACEN DE LA MARCA ━━━
+La forma del monolito debe derivar de la identidad concreta de esta marca:
 
-TRATAMIENTOS DE COLOR — cómo los colores de marca aparecen en el objeto:
-  "acero_pintado"      → elementos de acero lacados en el color primario de marca
-  "hormigon_pigmentado"→ masa de hormigón teñida con el color primario
-  "incrustacion_banda" → banda o panel de acero en color secundario atraviesa la forma
-  "oxidacion_acento"   → pátina industrial en tono del color de marca
-  "esmalte_parcial"    → esmalte industrial de color en zonas seleccionadas del hormigón
+  ▸ ¿Tiene la marca una letra inicial, un símbolo icónico o un logotipo reconocible?
+    → La silueta exterior del trofeo puede ser ese símbolo extruido en hormigón macizo.
 
-TRATAMIENTOS DE TEXTO:
-  "grabado_bajo_relieve" → texto hundido en la superficie de hormigón
-  "letras_acero_aplique" → letras de acero cortadas aplicadas sobre la superficie
-  "serigrafía_industrial"→ texto impreso industrialmente sobre panel de acero
-  "fundido_en_masa"      → texto integrado en el molde del hormigón
+  ▸ ¿El sector sugiere una metáfora volumétrica?
+    cervecera → barril, arco, letra inicial | banca → pilar, arco, volumen institucional
+    tecnología → cubo, nodo, torre | sostenible → forma orgánica, piedra erosionada
 
-REGLAS DE UNICIDAD:
-  □ Cada propuesta debe usar una forma_escultorica diferente — no repitas formas
-  □ Varía los tratamientos de color y texto entre propuestas
-  □ Cada diseño debe sentirse como propuesto por una fundición diferente
+  ▸ ¿La estética del brandbook sugiere formas?
+    brutalismo → bloque macizo | geometría suiza → prisma preciso | art déco → pirámide
 
-JERARQUÍA DEL TEXTO EN EL TROFEO (en este orden de importancia visual):
-  1. Nombre del premiado (recipient) — EL FOCO PRINCIPAL, tipografía más grande
+FORMAS MONOLÍTICAS DE REFERENCIA (no obligatorias):
+  Prismáticas:    bloque_rectangular | prisma_esbelto | cubo_macizo | trapezoide | losa_inclinada
+  Cilíndricas:    cilindro_vertical | medio_cilindro | totem_circular | disco_grueso
+  Tipográficas:   símbolo_logo_extruido | letra_inicial_maciza | siglas_monumentales
+  Orgánicas:      masa_erosionada | guijarro_monumental | forma_irregular_tallada
+  Arquitectónicas: pilar_monolítico | estela | obelisco_truncado | dintel | arco_macizo
+  Geométricas:    pentágono_extruido | hexágono_macizo | rombo_vertical
+  Escultóricas:   torsión_suave | forma_cóncava | cuña_angular | masa_asimétrica_estable
+
+━━━ TRATAMIENTOS DE GRABADO ━━━
+  "grabado_profundo" | "bajorrelieve_logo" | "tipografia_cincelada" | "geometria_incisa" | "textura_selectiva"
+
+━━━ TRATAMIENTOS DE TEXTO ━━━
+  "grabado_bajo_relieve" | "tipografia_cincelada" | "fundido_en_masa"
+
+━━━ REGLAS ━━━
+  □ 3 formas completamente distintas entre sí
+  □ Al menos una usa la silueta o símbolo del logo como forma exterior
+  □ Los 3 grabado_treatment diferentes
+  □ PROHIBIDO: múltiples piezas, acero, color, incrustaciones, elementos flotantes
+
+JERARQUÍA DEL TEXTO (grabado en superficie):
+  1. Nombre del premiado (recipient) — grabado más prominente
   2. Nombre del premio (headline)
   3. Nombre de la organización (subtitle)
 
-Devuelve EXCLUSIVAMENTE un JSON array de 6 conceptos, sin markdown:
+━━━ CAMPO forma_descripcion_prompt ━━━
+Descripción en INGLÉS del trofeo para el generador de imagen. Reglas:
+  1. Siempre empezar con "Single monolithic block of refined grey concrete —"
+  2. MATERIAL: mencionar "raw grey CONCRETE (rough porous surface, visible aggregate)"
+  3. TIPOGRAFÍA: si es letra/símbolo, especificar estilo exacto ("blackletter fractur", "bold geometric sans-serif")
+  4. CONTEOS: "EXACTLY N (word) [forma exacta]" para elementos repetidos
+  5. CONECTIVIDAD: si hay letras con partes no conectadas (punto de la "i", etc.) → usar bajorrelieve
+  6. Terminar con "no floating elements, all parts attached to the base"
+
+Ejemplo correcto:
+  "Single monolithic block of refined grey concrete — tall rectangular prism.
+   Front face has EXACTLY 5 (five) classic 5-pointed stars carved 6mm deep in a row.
+   Lower third has award text engraved in Roman capitals. No floating elements."
+
+Devuelve EXCLUSIVAMENTE un JSON array de 3 conceptos, sin markdown:
 
 [
   {
     "proposal_id": 1,
     "pattern_name": "nombre evocador 2-3 palabras en español",
-    "design_rationale": "por qué esta forma y tratamiento encajan con la marca (1 frase)",
-    "forma_escultorica": "columnar|fragmentado|abstracto|tipografico|arquitectonico|organico",
-    "color_treatment": "acero_pintado|hormigon_pigmentado|incrustacion_banda|oxidacion_acento|esmalte_parcial",
-    "text_treatment": "grabado_bajo_relieve|letras_acero_aplique|serigrafía_industrial|fundido_en_masa",
+    "design_rationale": "por qué esta forma refleja la identidad de ESTA marca (1 frase)",
+    "forma_escultorica": "nombre descriptivo del volumen",
+    "forma_descripcion_prompt": "English physical description starting with 'Single monolithic block...'",
+    "grabado_treatment": "grabado_profundo|bajorrelieve_logo|tipografia_cincelada|geometria_incisa|textura_selectiva",
+    "text_treatment": "grabado_bajo_relieve|tipografia_cincelada|fundido_en_masa",
     "award_text": {
       "headline": "nombre del premio exacto",
       "recipient": "nombre del premiado exacto",
-      "subtitle": "nombre de la organización/empresa — NUNCA el organizador del evento"
+      "subtitle": "nombre de la organización — NUNCA el organizador del evento"
     }
   },
   { "proposal_id": 2, ... },
-  { "proposal_id": 3, ... },
-  { "proposal_id": 4, ... },
-  { "proposal_id": 5, ... },
-  { "proposal_id": 6, ... }
+  { "proposal_id": 3, ... }
 ]
 
 Responde SOLO con el JSON array.\
 """
 
 _FORMAS_VALIDAS = {
-    "columnar", "fragmentado", "abstracto",
-    "tipografico", "arquitectonico", "organico",
+    "bloque_rectangular", "prisma_esbelto", "cubo_macizo", "trapezoide", "losa_inclinada",
+    "cilindro_vertical", "medio_cilindro", "totem_circular", "disco_grueso",
+    "simbolo_logo_extruido", "letra_inicial_maciza", "siglas_monumentales",
+    "masa_erosionada", "guijarro_monumental", "forma_irregular_tallada",
+    "pilar_monolitico", "estela", "obelisco_truncado", "dintel", "arco_macizo",
+    "pentágono_extruido", "hexágono_macizo", "rombo_vertical",
+    "torsión_suave", "forma_cóncava", "cuña_angular", "masa_asimétrica_estable",
+    # Legacy
+    "columnar", "abstracto", "tipografico", "arquitectonico", "organico",
 }
-_FORMAS_FALLBACK = list(_FORMAS_VALIDAS)
+_FORMAS_FALLBACK = ["bloque_rectangular", "prisma_esbelto", "cubo_macizo",
+                    "losa_vertical", "estela", "forma_irregular_tallada"]
+
+_PERSPECTIVAS_FORMA = [
+    "símbolo tipográfico: letra inicial o logotipo de la marca como cuerpo del trofeo",
+    "metáfora sectorial: forma que evoca el sector industrial de la marca",
+    "esencia del brandbook: la estética visual del manual traducida a volumen",
+    "abstracción cromática: la forma surge del contraste entre los colores de marca",
+    "monumentalidad minimal: bloque macizo con relieve del elemento más icónico de la marca",
+    "tensión estructural: piezas separadas unidas por el color de marca como elemento conector",
+    "silueta corporativa: la forma exterior del logo o símbolo extruida en hormigón",
+    "geometría de marca: las formas geométricas que definen la identidad visual, en volumen",
+    "referencia cultural: elemento del patrimonio cultural del sector de la marca",
+    "dinamismo y dirección: forma que transmite el movimiento o valor más representativo de la marca",
+]
 
 
 def _llamada_design_concepts_hormigon_acero(
     pedido: dict,
     brand_analysis: dict,
     canonical_palette: list | None = None,
+    brand_context: dict | None = None,
 ) -> list:
-    """Llamada B adaptada para Hormigón y Acero: genera formas escultóricas, no fondos DALL-E."""
+    """Genera 3 formas escultóricas monolíticas derivadas de la identidad de marca."""
+    import uuid as _uuid
     award  = pedido.get("award", {})
     evento = pedido.get("evento", {})
+    ctx    = brand_context or {}
 
-    content = []
-
+    run_id        = _uuid.uuid4().hex[:10]
     recipient_txt = award.get("recipient") or "Nombre del Premiado"
     headline_txt  = award.get("headline")  or "Excellence Award"
     subtitle_txt  = award.get("subtitle")  or "Sustain Awards"
-    fecha_line = f"\n- Fecha/Año: {award.get('fecha', '')}" if award.get("fecha") else ""
+    fecha_line    = f"\n- Fecha/Año: {award.get('fecha', '')}" if award.get("fecha") else ""
 
-    # Paleta canónica — inyectar colores como verdad absoluta
-    if canonical_palette:
-        _c0 = canonical_palette[0]
-        _c1 = canonical_palette[1] if len(canonical_palette) > 1 else canonical_palette[0]
+    perspectivas = random.Random(run_id).sample(_PERSPECTIVAS_FORMA, min(3, len(_PERSPECTIVAS_FORMA)))
+
+    content = []
+
+    semilla_txt = (
+        f"SEMILLA CREATIVA (run_id={run_id}):\n"
+        f"  P1 → explorar desde: \"{perspectivas[0]}\"\n"
+        f"  P2 → explorar desde: \"{perspectivas[1]}\"\n"
+        f"  P3 → explorar desde: \"{perspectivas[2]}\"\n"
+    )
+    content.append({"type": "text", "text": semilla_txt})
+
+    if ctx.get("logo_b64") and ctx.get("logo_type"):
+        content.append({"type": "image", "source": {
+            "type": "base64",
+            "media_type": ctx["logo_type"],
+            "data": ctx["logo_b64"],
+        }})
         content.append({"type": "text", "text": (
-            f"PALETA CANÓNICA DE MARCA:\n"
-            f"  Color primario  : {_c0}\n"
-            f"  Color secundario: {_c1}\n"
-            f"Estos colores deben guiar la elección de color_treatment en cada propuesta."
+            "Logo de la marca (imagen anterior). Analiza:\n"
+            "  - Letra inicial o símbolo: estilo tipográfico exacto\n"
+            "  - Elementos contables: cuenta el número EXACTO\n"
+            "  - Topología: ¿partes no conectadas? → usar bajorrelieve en vez de extrusión\n"
+            "Al menos una propuesta debe materializar un elemento de este logo.\n"
+            "En forma_descripcion_prompt: empieza con 'Single monolithic block of refined grey concrete —'"
         )})
 
+    brand_name = brand_analysis.get("brand_name", "")
     content.append({"type": "text", "text": (
-        f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False, indent=2)}\n\n"
-        f"TEXTO EXACTO DEL GALARDÓN (úsalo literalmente en award_text):\n"
-        f"- Nombre del premiado : {recipient_txt}\n"
-        f"- Nombre del premio   : {headline_txt}\n"
-        f"- Organización        : {subtitle_txt}\n"
+        f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False)}\n\n"
+        f"TEXTO DEL GALARDÓN:\n"
+        f"- Premiado   : {recipient_txt}\n"
+        f"- Premio     : {headline_txt}\n"
+        f"- Organización: {subtitle_txt}\n"
         f"{fecha_line}\n"
-        f"- Evento              : {evento.get('nombre', '')}\n\n"
-        "Genera los 6 conceptos con formas escultóricas distintas. "
-        "Usa EXACTAMENTE los textos indicados en award_text."
+        f"- Evento     : {evento.get('nombre', '')}\n\n"
+        f"Genera 3 formas monolíticas distintas y representativas de {brand_name or 'esta marca'}. "
+        f"Usa EXACTAMENTE los textos indicados en award_text."
     )})
+
+    print(f"  [DesignConceptsMaterial] run_id={run_id} · perspectivas: {[p[:35] for p in perspectivas]}")
 
     resultado = _llamar_claude(
         [{"role": "user", "content": content}],
@@ -1874,31 +707,26 @@ def _llamada_design_concepts_hormigon_acero(
     return resultado if isinstance(resultado, list) else []
 
 
-def _validar_concepto_material(c: dict, idx: int,
-                               primary_color: str = "",
-                               secondary_color: str = "",
-                               colors_extended: list | None = None) -> dict:
+def _validar_concepto_material(c: dict, idx: int) -> dict:
     """Valida y normaliza un concepto de Hormigón y Acero."""
     c.setdefault("proposal_id", idx + 1)
     c.setdefault("pattern_name", f"Propuesta {idx + 1}")
     c.setdefault("design_rationale", "")
-    c.setdefault("color_treatment", "acero_pintado")
+    c.setdefault("grabado_treatment", "grabado_profundo")
     c.setdefault("text_treatment", "grabado_bajo_relieve")
+    c.setdefault("color_treatment", "acero_pintado")
     c.setdefault("award_text", {})
 
-    # Garantizar forma válida; si Claude inventó un valor, asignar por índice
-    forma = c.get("forma_escultorica", "")
-    if forma not in _FORMAS_VALIDAS:
+    if not c.get("forma_escultorica"):
         c["forma_escultorica"] = _FORMAS_FALLBACK[idx % len(_FORMAS_FALLBACK)]
 
-    # Propagar colores para uso en capa_imagen
-    if primary_color:
-        c["_primary"] = primary_color
-    if secondary_color:
-        c["_secondary"] = secondary_color
-    if colors_extended:
-        c["_colors_extended"] = [col for col in colors_extended if col]
-
+    if not c.get("forma_descripcion_prompt"):
+        forma = c.get("forma_escultorica", "abstract monolithic form")
+        c["forma_descripcion_prompt"] = (
+            f"Single monolithic block of refined grey concrete — {forma} shape. "
+            "Raw portland cement surface with visible aggregate. Studio white background. "
+            "No floating elements, all parts attached to the base."
+        )
     return c
 
 
@@ -1908,91 +736,50 @@ def diseñar_desde_contexto_material(
     material_config: dict,
 ) -> tuple[list, dict]:
     """
-    Pipeline de Capa 1 para Agente 3 (materiales con forma dinámica).
-    Reutiliza Color Oracle y Brand Analysis del Agente 2.
-    Sustituye Design Concepts por generación de formas escultóricas.
+    Pipeline de Capa 1 para Agente 3 — trofeos monolíticos de hormigón.
 
-    Devuelve (conceptos[6], spec_completo).
+    Color omitido intencionalmente: el trofeo es siempre hormigón gris puro.
+    Solo se usa Brand Analysis para entender sector, identidad visual y
+    tipografía del logo — la información que guía la FORMA escultórica.
+
+    Devuelve (conceptos[3], spec_completo).
     """
-    id_pedido = pedido.get("id_pedido", "TEST")
+    id_pedido       = pedido.get("id_pedido", "TEST")
     material_nombre = material_config.get("nombre", "Material")
 
     print(f"\n{'─'*50}")
     print(f"  CAPA 1 · Agente 3 — {material_nombre}  [A:{MODEL_BRAND_ANALYSIS} / B:{MODEL_DESIGN_CONCEPTS}]")
     print(f"  Pedido: {id_pedido}")
+    print(f"  Modo: hormigón gris puro — Color Oracle y Firecrawl omitidos")
     print(f"{'─'*50}")
 
-    # ── Color Oracle (idéntico al Agente 2) ──────────────────────────────────────
-    _tiene_brandbook    = bool(brand_context.get("pdf_resumen"))
-    _fc_saturated_count = brand_context.get("_fc_saturated_count", 0)
-    _fc_logo_confirmed  = brand_context.get("_fc_logo_confirmed", False)
-    _tiene_firecrawl    = bool(brand_context.get("canonical_palette")) and _fc_saturated_count >= 2
+    # Color Oracle y Firecrawl omitidos en Agente 3:
+    # El trofeo es siempre hormigón gris monocromático — los colores de marca
+    # no se aplican al objeto físico, por lo que extraerlos es innecesario.
+    brand_context["canonical_palette"] = []
 
-    def _hue_dist(h1: str, h2: str) -> float:
-        import colorsys
-        def _hue(h):
-            try:
-                r, g, b = int(h[1:3], 16)/255, int(h[3:5], 16)/255, int(h[5:7], 16)/255
-                return colorsys.rgb_to_hsv(r, g, b)[0]
-            except Exception:
-                return 0.0
-        d = abs(_hue(h1) - _hue(h2))
-        return min(d, 1.0 - d)
-
-    if _tiene_brandbook:
-        brand_context["canonical_palette"] = []
-        print("  → Brandbook disponible — Color Oracle omitido")
-    elif not _tiene_firecrawl:
-        print("\n[0.5] Color Oracle (Haiku)...")
-        _canon = _llamada_color_oracle(brand_context)
-        if _canon:
-            brand_context["canonical_palette"] = _consolidar_hsv(_canon, max_grupos=3)
-            print(f"  → Oracle: {brand_context['canonical_palette']}")
-    else:
-        print(f"\n[0.5] Color Oracle omitido — Firecrawl OK: {brand_context.get('canonical_palette')}")
-
-    # ── Brand Analysis (idéntico al Agente 2) ────────────────────────────────────
-    print("\n[A] Brand Analysis...")
+    # ── Brand Analysis ────────────────────────────────────────────────────────────
+    # Se mantiene para conocer: sector, tono de marca, estilo tipográfico del logo.
+    # Esta información guía la elección de la FORMA escultórica, no el color.
+    print("\n[A] Brand Analysis (identidad visual — sin colores)...")
     brand_analysis = _llamada_brand_analysis(pedido, brand_context)
-    colores = brand_analysis.get("colors", {})
 
-    # Override programático con canonical_palette
-    _canon_pal = brand_context.get("canonical_palette", [])
-    if _canon_pal:
-        colores["primary"]         = _canon_pal[0]
-        colores["secondary"]       = _canon_pal[1] if len(_canon_pal) >= 2 else colores.get("secondary")
-        colores["accent"]          = _canon_pal[2] if len(_canon_pal) >= 3 else colores.get("accent")
-        colores["colors_extended"] = _canon_pal[:]
-        brand_analysis["colors"]   = colores
-        print(f"  [OVERRIDE] canonical_palette: {_canon_pal}")
+    brand_name = brand_analysis.get("brand_name", "—")
+    brand_tone = brand_analysis.get("brand_tone", "—")
+    typo       = brand_analysis.get("typography", {})
+    print(f"  Marca: {brand_name} · Tono: {brand_tone} · Fuente: {typo.get('font_name','—')}")
 
-    primary_col   = colores.get("primary", "")   or ""
-    secondary_col = colores.get("secondary", "") or ""
-    colors_ext    = colores.get("colors_extended", [])
-
-    # ── Design Concepts — Formas Escultóricas ────────────────────────────────────
-    print(f"\n[B] Design Concepts — Formas {material_nombre}...")
+    # ── Design Concepts — Formas Escultóricas (3 propuestas) ─────────────────────
+    print(f"\n[B] Design Concepts — Formas {material_nombre} (3 propuestas)...")
     conceptos = _llamada_design_concepts_hormigon_acero(
-        pedido, brand_analysis, canonical_palette=_canon_pal
+        pedido, brand_analysis,
+        canonical_palette=[],
+        brand_context=brand_context,
     )
     conceptos = [
-        _validar_concepto_material(c, i,
-                                   primary_color=primary_col,
-                                   secondary_color=secondary_col,
-                                   colors_extended=colors_ext)
-        for i, c in enumerate(conceptos[:6])
+        _validar_concepto_material(c, i)
+        for i, c in enumerate(conceptos[:3])
     ]
-
-    # Garantizar unicidad de formas: si hay duplicados, asignar forma por índice
-    _formas_usadas: set[str] = set()
-    for i, c in enumerate(conceptos):
-        forma = c.get("forma_escultorica", "")
-        if forma in _formas_usadas:
-            for f in _FORMAS_FALLBACK:
-                if f not in _formas_usadas:
-                    c["forma_escultorica"] = f
-                    break
-        _formas_usadas.add(c.get("forma_escultorica", f"fallback_{i}"))
 
     # Forzar textos del cliente si los proporcionó
     _award_input = pedido.get("award", {})
@@ -2006,16 +793,16 @@ def diseñar_desde_contexto_material(
             if _rec_fixed: at["recipient"] = _rec_fixed
             if _sub_fixed: at["subtitle"]  = _sub_fixed
 
-    while len(conceptos) < 6:
-        conceptos.append(_validar_concepto_material(
-            {}, len(conceptos),
-            primary_color=primary_col,
-            secondary_color=secondary_col,
-            colors_extended=colors_ext,
-        ))
+    while len(conceptos) < 3:
+        conceptos.append(_validar_concepto_material({}, len(conceptos)))
 
+    print(f"\n  ┌── Formas generadas ─────────────────────────────")
     for c in conceptos:
-        print(f"  → P{c['proposal_id']}: {c['pattern_name']} [forma: {c.get('forma_escultorica','?')}]")
+        print(f"  │  P{c['proposal_id']}: {c['pattern_name']}")
+        print(f"  │       forma    : {c.get('forma_escultorica','?')}")
+        print(f"  │       grabado  : {c.get('grabado_treatment','?')}")
+        print(f"  │       rationale: {c.get('design_rationale','')[:70]}")
+    print(f"  └────────────────────────────────────────────────")
 
     spec = {
         "id_pedido":      id_pedido,

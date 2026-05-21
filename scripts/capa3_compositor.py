@@ -30,11 +30,6 @@ def cargar_modelo_material(id_material: str) -> dict:
     raise ValueError(f"Material '{id_material}' no encontrado en material_catalog.json")
 
 
-# Alias de compatibilidad — test_server puede llamar a cargar_modelo_trofeo en el futuro
-def cargar_modelo_trofeo(id_modelo: str) -> dict:
-    """Alias de compatibilidad con la interfaz del Agente 2."""
-    return cargar_modelo_material(id_modelo)
-
 
 def componer(
     trofeo_img: Image.Image,
@@ -59,13 +54,12 @@ def componer(
     dims   = material_config.get("dimensiones_output", {"ancho": 1024, "alto": 1536})
     target = (dims["ancho"], dims["alto"])
 
-    img = trofeo_img.convert("RGB")
+    img = trofeo_img if trofeo_img.mode == "RGB" else trofeo_img.convert("RGB")
 
     if img.size != target:
         img = _encuadrar_con_fondo(img, target)
 
-    pid_log = "(sin pid)"
-    print(f"  [Capa 3] Trofeo normalizado {img.size[0]}×{img.size[1]}px  {pid_log}")
+    print(f"  [Capa 3] Trofeo normalizado {img.size[0]}×{img.size[1]}px")
     return img
 
 

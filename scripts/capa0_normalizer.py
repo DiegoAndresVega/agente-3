@@ -272,9 +272,9 @@ def _extraer_brandbook_completo(data: bytes) -> tuple[list[str], str, dict]:
 
             buf = BytesIO()
             img.save(buf, format="JPEG", quality=65)
-            b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
-            imagenes_b64.append(b64)
-            kb_total += len(buf.getvalue()) // 1024
+            raw = buf.getvalue()
+            imagenes_b64.append(base64.standard_b64encode(raw).decode("utf-8"))
+            kb_total += len(raw) // 1024
 
         doc.close()
         print(f"    [BrandBook] Páginas seleccionadas por relevancia: {indices}")
@@ -757,7 +757,8 @@ def _consolidar_colores_hsv(colores: list[str], max_grupos: int = 5) -> list[str
 
 def normalizar_pedido(pedido: dict,
                       logo_bytes: bytes | None = None,
-                      pdf_bytes: bytes | None = None) -> dict:
+                      pdf_bytes: bytes | None = None,
+                      skip_color_extraction: bool = False) -> dict:
     """
     Normaliza todos los assets de un pedido en un brand_context unificado.
 
@@ -833,19 +834,14 @@ def normalizar_pedido(pedido: dict,
     if url:
         print(f"  → URL      : {url} — analizando...")
 
-        # Firecrawl: capa primaria de identificación de color y tipografía.
-        # Si devuelve 2+ colores válidos → establece canonical_palette directamente,
-        # saltando el Color Oracle en capa1. Sin key → silencioso, pipeline normal.
-        print(f"  → Firecrawl   : intentando extracción de identidad...")
-        _fc = _llamar_firecrawl(url)
+        # Firecrawl: omitido si skip_color_extraction=True (Agente 3 — hormigón gris puro)
+        if skip_color_extraction:
+            print(f"  → Firecrawl   : omitido (hormigón monocromático — colores de marca no se usan)")
+            _fc = None
+        else:
+            print(f"  → Firecrawl   : intentando extracción de identidad...")
+            _fc = _llamar_firecrawl(url)
         if _fc:
-            _raw_fc_cols = [_fc.get("primary_color"), _fc.get("secondary_color"), _fc.get("accent_color")]
-            _fc_cols_all = [norm for c in _raw_fc_cols if (norm := _normalizar_color_hex(c))]
-
-            # Separar saturados de blancos/casi-blancos.
-            # Los blancos pueden ser parte legítima de la marca (Parodontax: rojo + blanco),
-            # pero los ponemos al final para que los colores saturados tengan prioridad.
-            # Si Firecrawl solo devuelve saturados, los blancos se ignoran.
             def _es_casi_blanco(h: str) -> bool:
                 try:
                     r, g, b = int(h[1:3],16), int(h[3:5],16), int(h[5:7],16)
@@ -853,20 +849,47 @@ def normalizar_pedido(pedido: dict,
                 except Exception:
                     return False
 
-            _fc_saturados = [c for c in _fc_cols_all if not _es_casi_blanco(c)]
-            _fc_blancos   = [c for c in _fc_cols_all if _es_casi_blanco(c)]
+            def _hue_dist_hex(h1: str, h2: str) -> float:
+                import colorsys
+                def _hue(h):
+                    try:
+                        r, g, b = int(h[1:3],16)/255, int(h[3:5],16)/255, int(h[5:7],16)/255
+                        return colorsys.rgb_to_hsv(r, g, b)[0]
+                    except Exception:
+                        return 0.0
+                d = abs(_hue(h1) - _hue(h2))
+                return min(d, 1.0 - d)
 
-            # Deduplicar saturados por familia HSV — elimina near-duplicates (ej: #FFBA00 y #FFBA00)
-            _fc_saturados = _consolidar_colores_hsv(_fc_saturados, max_grupos=3)
+            # primary_color fue ya corregido por logo_color en _llamar_firecrawl — es la verdad del logo.
+            # Siempre ocupa posición 0; nunca se sobreescribe por saturación de los secundarios.
+            _fc_primary = _normalizar_color_hex(_fc.get("primary_color", ""))
+            _fc_others_raw = [_fc.get("secondary_color"), _fc.get("accent_color")]
+            _fc_others_all = [norm for c in _fc_others_raw if (norm := _normalizar_color_hex(c))]
 
-            # Palette: saturados primero, blancos al final solo si hay pocos saturados
-            _fc_cols = _fc_saturados + (_fc_blancos if len(_fc_saturados) < 2 else [])
-            _n_saturados = len(_fc_saturados)
+            # Separar blancos de saturados entre los colores secundarios/accent
+            _fc_otros_sat  = [c for c in _fc_others_all if not _es_casi_blanco(c)]
+            _fc_otros_blan = [c for c in _fc_others_all if _es_casi_blanco(c)]
 
-            if _fc_blancos and len(_fc_saturados) >= 2:
-                print(f"    Blancos omitidos (ya hay {_n_saturados} colores saturados): {_fc_blancos}")
-            elif _fc_blancos:
-                print(f"    Blancos incluidos (pocos saturados — pueden ser parte de la marca): {_fc_blancos}")
+            # Deduplicar secundarios entre sí, y excluir los que repiten familia del primario
+            _fc_otros_sat = _consolidar_colores_hsv(_fc_otros_sat, max_grupos=2)
+            if _fc_primary:
+                _fc_otros_sat = [c for c in _fc_otros_sat if _hue_dist_hex(c, _fc_primary) > 0.08]
+
+            # Construir paleta: primaria siempre primero
+            if _fc_primary and not _es_casi_blanco(_fc_primary):
+                _fc_cols = [_fc_primary] + _fc_otros_sat
+                if len(_fc_cols) < 2:
+                    _fc_cols += _fc_otros_blan
+            else:
+                # Primaria es blanca/clara → tratarla como blanco de marca
+                _fc_cols = _fc_otros_sat + ([_fc_primary] if _fc_primary else []) + _fc_otros_blan
+
+            _n_saturados = len([c for c in _fc_cols if not _es_casi_blanco(c)])
+
+            if _fc_otros_blan and _n_saturados >= 2:
+                print(f"    Blancos omitidos (ya hay {_n_saturados} colores saturados): {_fc_otros_blan}")
+            elif _fc_otros_blan:
+                print(f"    Blancos incluidos (pocos saturados): {_fc_otros_blan}")
 
             _fc_logo_confirmed = bool(_normalizar_color_hex(_fc.get("logo_color", "")))
             if _fc_cols:
@@ -878,33 +901,35 @@ def normalizar_pedido(pedido: dict,
                     "body":    _fc.get("font_body", ""),
                 }
                 print(f"    Colores canónicos : {_fc_cols}  (saturados: {_n_saturados})")
+                print(f"    Color primario    : {_fc_primary or '—'}  (logo confirmado: {_fc_logo_confirmed})")
                 if _fc.get("font_heading"):
                     print(f"    Tipografía heading: {_fc['font_heading']}")
             else:
-                print(f"    Resultado insuficiente — raw: {_raw_fc_cols}")
+                print(f"    Resultado insuficiente — raw primary: {_fc.get('primary_color')}, sec: {_fc.get('secondary_color')}, accent: {_fc.get('accent_color')}")
                 print(f"    Pipeline estándar (Color Oracle)")
         else:
             print(f"    Sin key o error — pipeline estándar (Color Oracle)")
 
-        # CSS/HTML analysis — siempre útil para estilo, densidad visual y colores secundarios
-        url_data = fetch_url(url)
-        brand_context["url_data"] = url_data
-        if url_data["ok"]:
-            print(f"    CSS colores        : {url_data['colores_detectados'][:5]}")
-            print(f"    Densidad visual    : {url_data['densidad_visual']}")
-            print(f"    Gradientes         : {'sí' if url_data['tiene_gradientes'] else 'no'}")
-        else:
-            print(f"    Aviso: {url_data['descripcion_estilo']}")
+        # CSS/HTML analysis — omitido si no se usan colores (Agente 3 hormigón monocromático)
+        if not skip_color_extraction:
+            url_data = fetch_url(url)
+            brand_context["url_data"] = url_data
+            if url_data["ok"]:
+                print(f"    CSS colores        : {url_data['colores_detectados'][:5]}")
+                print(f"    Densidad visual    : {url_data['densidad_visual']}")
+                print(f"    Gradientes         : {'sí' if url_data['tiene_gradientes'] else 'no'}")
+            else:
+                print(f"    Aviso: {url_data['descripcion_estilo']}")
 
-        # Screenshot: se omite solo si Firecrawl encontró 2+ colores saturados (paleta completa).
-        # Si Firecrawl solo encontró 1 saturado + blanco, tomamos screenshot igualmente
-        # para que el hero pixel extraction encuentre colores adicionales (ej: amarillo CTA).
+        # Screenshot omitido si skip_color_extraction=True o si Firecrawl ya fue suficiente
         _fc_saturated_count = brand_context.get("_fc_saturated_count", 0)
         _fc_ok = bool(brand_context.get("canonical_palette")) and _fc_saturated_count >= 2
-        if _fc_ok:
+        if skip_color_extraction:
+            print(f"  → Screenshot web: omitido (hormigón monocromático — colores no necesarios)")
+        elif _fc_ok:
             print(f"  → Screenshot web: omitido (Firecrawl identificó {_fc_saturated_count} colores saturados)")
         else:
-            _razon = f"Firecrawl solo encontró {_fc_saturated_count} color(es) saturado(s) — buscando más" if brand_context.get("canonical_palette") else "sin Firecrawl"
+            _razon = f"Firecrawl solo encontró {_fc_saturated_count} color(es)" if brand_context.get("canonical_palette") else "sin Firecrawl"
             print(f"  → Screenshot web: capturando ({_razon})...")
             screenshot_b64, hero_colors = screenshot_url(url)
             if screenshot_b64:

@@ -10,16 +10,17 @@ Uso:
 import os
 import sys
 import uuid
+import json
+import base64
+import traceback
+import concurrent.futures
+from pathlib import Path
+from io import BytesIO
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-
-import base64
-import shutil
-from pathlib import Path
-from io import BytesIO
 
 from flask import Flask, request, jsonify, send_from_directory
 
@@ -44,13 +45,15 @@ def _cargar_claves(ruta: str = "lakla.txt") -> None:
             elif clave.startswith("fc-"):
                 os.environ["FIRECRAWL_API_KEY"] = clave
                 cargadas.append("FIRECRAWL_API_KEY")
+            elif clave.startswith("r8_"):
+                os.environ["REPLICATE_API_TOKEN"] = clave
+                cargadas.append("REPLICATE_API_TOKEN")
     if cargadas:
         print(f"  [claves] Cargadas desde '{ruta}': {', '.join(cargadas)}")
 
 
 _cargar_claves()
 
-sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 
 from scripts import capa0_normalizer as capa0
 from scripts import capa1_ia         as capa1
@@ -87,6 +90,11 @@ def handle_exception(e):
 @app.errorhandler(413)
 def handle_too_large(e):
     return jsonify({"error": "Archivo demasiado grande. Máximo: 100 MB."}), 413
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
 
 
 @app.route("/feedback", methods=["POST"])
@@ -144,15 +152,14 @@ def generar():
         logo_bytes  = logo_file.read() if _tiene_logo else None
         logo_ext    = Path(logo_file.filename).suffix.lstrip(".") if _tiene_logo else "png"
 
-        url_input      = request.form.get("url_corporativa", "").strip()
-        pdf_file_check = request.files.get("brandbook")
-        _tiene_pdf     = pdf_file_check and pdf_file_check.filename != ""
+        url_input = request.form.get("url_corporativa", "").strip()
+        pdf_file  = request.files.get("brandbook")
+        _tiene_pdf = pdf_file and pdf_file.filename != ""
 
         if not _tiene_logo and not url_input and not _tiene_pdf:
             return jsonify({"error": "Proporciona al menos el logo, la URL corporativa o el brandbook"}), 400
 
-        pdf_file  = request.files.get("brandbook")
-        pdf_bytes = pdf_file.read() if pdf_file and pdf_file.filename else None
+        pdf_bytes = pdf_file.read() if _tiene_pdf else None
 
         # Fuente corporativa opcional
         font_file = request.files.get("font")
@@ -208,7 +215,9 @@ def generar():
 
         # Logo temporal
         if logo_bytes:
-            logo_tmp_path = PROJECT_ROOT / "assets" / "logos" / f"_test_{job_id}.{logo_ext}"
+            logos_dir = PROJECT_ROOT / "assets" / "logos"
+            logos_dir.mkdir(parents=True, exist_ok=True)
+            logo_tmp_path = logos_dir / f"_test_{job_id}.{logo_ext}"
             logo_tmp_path.write_bytes(logo_bytes)
             pedido["assets"]["logo_path"] = str(logo_tmp_path.relative_to(PROJECT_ROOT))
 
@@ -216,8 +225,11 @@ def generar():
 
         # ── Pipeline ──────────────────────────────────────────────────────────
         # Capa 0: extracción de marca
+        # skip_color_extraction=True: Agente 3 usa hormigón gris puro — los
+        # colores de marca no se aplican al trofeo, Firecrawl es innecesario.
         brand_context = capa0.normalizar_pedido(
-            pedido, logo_bytes=logo_bytes, pdf_bytes=pdf_bytes
+            pedido, logo_bytes=logo_bytes, pdf_bytes=pdf_bytes,
+            skip_color_extraction=True
         )
         brand_context["logo_path"] = pedido["assets"]["logo_path"]
 
@@ -226,56 +238,44 @@ def generar():
             pedido, brand_context, material_config
         )
 
-        # Capas imagen + compositing
+        # Capas imagen + compositing — los 3 trofeos se generan en paralelo
         (PROJECT_ROOT / "outputs" / "mockups").mkdir(parents=True, exist_ok=True)
-        mockups = []
+        brand_analysis = spec.get("brand_analysis", {})
 
-        for concepto in briefs:
-            pid    = concepto["proposal_id"]
-            nombre = concepto.get("pattern_name", f"propuesta_{pid}")
-
-            award_text = concepto.get("award_text", {})
+        def _generar_mockup(concepto):
+            pid  = concepto["proposal_id"]
+            at   = concepto.get("award_text", {})
             award = {
-                "headline":  (award_text.get("headline") or pedido["award"]["headline"] or "Excellence Award"),
-                "recipient": (award_text.get("recipient") or pedido["award"]["recipient"] or "Nombre del Premiado"),
-                "subtitle":  (award_text.get("subtitle") or pedido["award"]["subtitle"] or ""),
+                "headline":  at.get("headline")  or pedido["award"]["headline"]  or "Excellence Award",
+                "recipient": at.get("recipient") or pedido["award"]["recipient"] or "Nombre del Premiado",
+                "subtitle":  at.get("subtitle")  or pedido["award"]["subtitle"]  or "",
                 "fecha":     pedido["award"]["fecha"],
             }
-
-            # Capa imagen: genera el trofeo completo
             trofeo_img = capa_img.generar_trofeo(
-                concepto=concepto,
-                material_config=material_config,
-                brand_context=brand_context,
-                award=award,
+                concepto=concepto, material_config=material_config,
+                brand_context=brand_context, award=award,
+                brand_analysis=brand_analysis,
             )
-
-            # Capa 3: normaliza y exporta
             mockup_img = capa3.componer(trofeo_img, material_config)
 
+            # Guardar en disco y capturar bytes sin re-leer desde disco
             out_path = PROJECT_ROOT / "outputs" / "mockups" / f"mockup_{job_id}_p{pid}.jpg"
-            mockup_img.save(str(out_path), quality=95)
+            buf = BytesIO()
+            mockup_img.save(buf, format="JPEG", quality=95)
+            img_bytes = buf.getvalue()
+            out_path.write_bytes(img_bytes)
 
-            img_b64 = base64.b64encode(out_path.read_bytes()).decode("utf-8")
-
-            _prim = concepto.get("_primary", "")
-            _sec  = concepto.get("_secondary", "")
-            _ext  = concepto.get("_colors_extended", [])
-            _pal  = [c for c in [_prim, _sec] + list(_ext) if c and len(c) == 7 and c.startswith("#")]
-            _pal  = list(dict.fromkeys(_pal))[:5]
-
-            mockups.append({
-                "proposal_id":      pid,
-                "nombre":           nombre,
-                "concepto":         concepto.get("design_rationale", ""),
+            return {
+                "proposal_id":       pid,
+                "nombre":            concepto.get("pattern_name", f"propuesta_{pid}"),
+                "concepto":          concepto.get("design_rationale", ""),
                 "forma_escultorica": concepto.get("forma_escultorica", ""),
-                "color_treatment":  concepto.get("color_treatment", ""),
-                "text_treatment":   concepto.get("text_treatment", ""),
-                "color_primario":   _prim,
-                "color_secundario": _sec,
-                "palette":          _pal,
-                "imagen_b64":       img_b64,
-            })
+                "color_treatment":   concepto.get("color_treatment", ""),
+                "imagen_b64":        base64.b64encode(img_bytes).decode("utf-8"),
+            }
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            mockups = list(pool.map(_generar_mockup, briefs))
 
         analisis = spec.get("brand_analysis", {})
         _cp = brand_context.get("canonical_palette") or []
@@ -310,7 +310,7 @@ def generar():
 if __name__ == "__main__":
     from scripts.config import (
         MODEL_BRAND_ANALYSIS, MODEL_DESIGN_CONCEPTS,
-        IMAGE_QUALITY, USE_DALLE, IMAGE_PROVIDER,
+        IMAGE_QUALITY, USE_DALLE, USE_LORA,
     )
 
     errores = []
