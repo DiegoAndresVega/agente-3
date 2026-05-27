@@ -489,9 +489,12 @@ def _llamada_brand_analysis(pedido: dict, brand_context: dict) -> dict:
         "Analiza los assets y extrae el vocabulario visual completo."
     )})
 
+    from scripts.prompts_manager import cargar_prompts
+    prompt_a_activo = cargar_prompts().get("prompt_a_brand_analysis") or PROMPT_A_BRAND_ANALYSIS
+
     resultado = _llamar_claude(
         [{"role": "user", "content": content}],
-        PROMPT_A_BRAND_ANALYSIS,
+        prompt_a_activo,
         "BrandAnalysis",
         temperatura=TEMP_BRAND_ANALYSIS,
         model=MODEL_BRAND_ANALYSIS,
@@ -523,67 +526,31 @@ def guardar_spec(spec: dict, id_pedido: str) -> Path:
 # ─── Agente 3 — Hormigón y Acero (monolito) ──────────────────────────────────
 
 PROMPT_B_HORMIGON_ACERO = """\
-Eres el director creativo de un estudio de galardones corporativos de alta gama especializado
-en escultura monolítica de hormigón. Tu trabajo: diseñar 3 propuestas de trofeo físico.
+Eres un escultor brutalista. Tu trabajo: diseñar 3 trofeos físicos de hormigón con
+carácter monumental, peso visual y presencia arquitectónica. Estética de referencia:
+Donald Judd, Tadao Ando, Eduardo Chillida — volúmenes puros, hormigón crudo, silencio formal.
 
-━━━ PRINCIPIO DE DISEÑO — MONOLITO DE HORMIGÓN ━━━
+━━━ PRINCIPIO ━━━
 Cada trofeo es un bloque único de hormigón: un solo volumen continuo, sin piezas ensambladas,
-sin acero, sin color añadido. La identidad y la creatividad se expresan EXCLUSIVAMENTE mediante:
-  • La FORMA del volumen (silueta, proporciones, geometría)
-  • Los GRABADOS EN PROFUNDIDAD (relieves, incisiones, letras cinceladas, motivos en bajorrelieve)
+sin acero, sin color. La forma debe transmitir peso, densidad y permanencia.
 
-━━━ PRINCIPIO — LA FORMA Y EL GRABADO NACEN DE LA MARCA ━━━
-La forma del monolito debe derivar de la identidad concreta de esta marca:
-
-  ▸ ¿Tiene la marca una letra inicial, un símbolo icónico o un logotipo reconocible?
-    → La silueta exterior del trofeo puede ser ese símbolo extruido en hormigón macizo.
-
-  ▸ ¿El sector sugiere una metáfora volumétrica?
-    cervecera → barril, arco, letra inicial | banca → pilar, arco, volumen institucional
-    tecnología → cubo, nodo, torre | sostenible → forma orgánica, piedra erosionada
-
-  ▸ ¿La estética del brandbook sugiere formas?
-    brutalismo → bloque macizo | geometría suiza → prisma preciso | art déco → pirámide
-
-FORMAS MONOLÍTICAS DE REFERENCIA (no obligatorias):
-  Prismáticas:    bloque_rectangular | prisma_esbelto | cubo_macizo | trapezoide | losa_inclinada
-  Cilíndricas:    cilindro_vertical | medio_cilindro | totem_circular | disco_grueso
-  Tipográficas:   símbolo_logo_extruido | letra_inicial_maciza | siglas_monumentales
-  Orgánicas:      masa_erosionada | guijarro_monumental | forma_irregular_tallada
-  Arquitectónicas: pilar_monolítico | estela | obelisco_truncado | dintel | arco_macizo
-  Geométricas:    pentágono_extruido | hexágono_macizo | rombo_vertical
-  Escultóricas:   torsión_suave | forma_cóncava | cuña_angular | masa_asimétrica_estable
-
-━━━ TRATAMIENTOS DE GRABADO ━━━
-  "grabado_profundo" | "bajorrelieve_logo" | "tipografia_cincelada" | "geometria_incisa" | "textura_selectiva"
-
-━━━ TRATAMIENTOS DE TEXTO ━━━
-  "grabado_bajo_relieve" | "tipografia_cincelada" | "fundido_en_masa"
+━━━ CRITERIO DE DISEÑO ━━━
+Las 3 propuestas deben ser geométricamente distintas entre sí.
+Trabaja con manipulaciones del volumen sólido: cortes, facetas, vaciados, inclinaciones,
+proporciones extremas, torsiones suaves. Cada forma debe poder describirse con geometría
+pura — sin referencias a objetos, animales, plantas ni figuras reconocibles.
 
 ━━━ REGLAS ━━━
   □ 3 formas completamente distintas entre sí
-  □ Al menos una usa la silueta o símbolo del logo como forma exterior
-  □ Los 3 grabado_treatment diferentes
-  □ PROHIBIDO: múltiples piezas, acero, color, incrustaciones, elementos flotantes
-
-JERARQUÍA DEL TEXTO (grabado en superficie):
-  1. Nombre del premiado (recipient) — grabado más prominente
-  2. Nombre del premio (headline)
-  3. Nombre de la organización (subtitle)
+  □ PROHIBIDO: formas que imiten objetos reales (hojas, manos, animales, herramientas)
+  □ PROHIBIDO: múltiples piezas separadas, acero, color, incrustaciones, elementos flotantes
+  □ Cada forma debe ser autoportante y físicamente construible en hormigón real
 
 ━━━ CAMPO forma_descripcion_prompt ━━━
-Descripción en INGLÉS del trofeo para el generador de imagen. Reglas:
-  1. Siempre empezar con "Single monolithic block of refined grey concrete —"
-  2. MATERIAL: mencionar "raw grey CONCRETE (rough porous surface, visible aggregate)"
-  3. TIPOGRAFÍA: si es letra/símbolo, especificar estilo exacto ("blackletter fractur", "bold geometric sans-serif")
-  4. CONTEOS: "EXACTLY N (word) [forma exacta]" para elementos repetidos
-  5. CONECTIVIDAD: si hay letras con partes no conectadas (punto de la "i", etc.) → usar bajorrelieve
-  6. Terminar con "no floating elements, all parts attached to the base"
-
-Ejemplo correcto:
-  "Single monolithic block of refined grey concrete — tall rectangular prism.
-   Front face has EXACTLY 5 (five) classic 5-pointed stars carved 6mm deep in a row.
-   Lower third has award text engraved in Roman capitals. No floating elements."
+Descripción en INGLÉS de la FORMA FÍSICA para el generador de imagen:
+  1. Empezar con "Single monolithic block of refined grey concrete —"
+  2. Describir la GEOMETRÍA pura: volumen, cortes, proporciones, planos. Sin grabados ni texto.
+  3. Terminar con "no floating elements, all parts attached to base"
 
 Devuelve EXCLUSIVAMENTE un JSON array de 3 conceptos, sin markdown:
 
@@ -591,11 +558,9 @@ Devuelve EXCLUSIVAMENTE un JSON array de 3 conceptos, sin markdown:
   {
     "proposal_id": 1,
     "pattern_name": "nombre evocador 2-3 palabras en español",
-    "design_rationale": "por qué esta forma refleja la identidad de ESTA marca (1 frase)",
+    "design_rationale": "qué manipulación geométrica define esta forma y por qué encaja con la marca (1 frase)",
     "forma_escultorica": "nombre descriptivo del volumen",
-    "forma_descripcion_prompt": "English physical description starting with 'Single monolithic block...'",
-    "grabado_treatment": "grabado_profundo|bajorrelieve_logo|tipografia_cincelada|geometria_incisa|textura_selectiva",
-    "text_treatment": "grabado_bajo_relieve|tipografia_cincelada|fundido_en_masa",
+    "forma_descripcion_prompt": "English physical description of the FORM ONLY, starting with 'Single monolithic block...'",
     "award_text": {
       "headline": "nombre del premio exacto",
       "recipient": "nombre del premiado exacto",
@@ -612,7 +577,6 @@ Responde SOLO con el JSON array.\
 _FORMAS_VALIDAS = {
     "bloque_rectangular", "prisma_esbelto", "cubo_macizo", "trapezoide", "losa_inclinada",
     "cilindro_vertical", "medio_cilindro", "totem_circular", "disco_grueso",
-    "simbolo_logo_extruido", "letra_inicial_maciza", "siglas_monumentales",
     "masa_erosionada", "guijarro_monumental", "forma_irregular_tallada",
     "pilar_monolitico", "estela", "obelisco_truncado", "dintel", "arco_macizo",
     "pentágono_extruido", "hexágono_macizo", "rombo_vertical",
@@ -624,7 +588,6 @@ _FORMAS_FALLBACK = ["bloque_rectangular", "prisma_esbelto", "cubo_macizo",
                     "losa_vertical", "estela", "forma_irregular_tallada"]
 
 _PERSPECTIVAS_FORMA = [
-    "símbolo tipográfico: letra inicial o logotipo de la marca como cuerpo del trofeo",
     "metáfora sectorial: forma que evoca el sector industrial de la marca",
     "esencia del brandbook: la estética visual del manual traducida a volumen",
     "abstracción cromática: la forma surge del contraste entre los colores de marca",
@@ -667,21 +630,6 @@ def _llamada_design_concepts_hormigon_acero(
     )
     content.append({"type": "text", "text": semilla_txt})
 
-    if ctx.get("logo_b64") and ctx.get("logo_type"):
-        content.append({"type": "image", "source": {
-            "type": "base64",
-            "media_type": ctx["logo_type"],
-            "data": ctx["logo_b64"],
-        }})
-        content.append({"type": "text", "text": (
-            "Logo de la marca (imagen anterior). Analiza:\n"
-            "  - Letra inicial o símbolo: estilo tipográfico exacto\n"
-            "  - Elementos contables: cuenta el número EXACTO\n"
-            "  - Topología: ¿partes no conectadas? → usar bajorrelieve en vez de extrusión\n"
-            "Al menos una propuesta debe materializar un elemento de este logo.\n"
-            "En forma_descripcion_prompt: empieza con 'Single monolithic block of refined grey concrete —'"
-        )})
-
     brand_name = brand_analysis.get("brand_name", "")
     content.append({"type": "text", "text": (
         f"ANÁLISIS DE MARCA:\n{json.dumps(brand_analysis, ensure_ascii=False)}\n\n"
@@ -697,9 +645,12 @@ def _llamada_design_concepts_hormigon_acero(
 
     print(f"  [DesignConceptsMaterial] run_id={run_id} · perspectivas: {[p[:35] for p in perspectivas]}")
 
+    from scripts.prompts_manager import cargar_prompts
+    prompt_activo = cargar_prompts().get("prompt_b_hormigon_acero") or PROMPT_B_HORMIGON_ACERO
+
     resultado = _llamar_claude(
         [{"role": "user", "content": content}],
-        PROMPT_B_HORMIGON_ACERO,
+        prompt_activo,
         "DesignConceptsMaterial",
         temperatura=TEMP_DESIGN_CONCEPTS,
         model=MODEL_DESIGN_CONCEPTS,
@@ -748,26 +699,13 @@ def diseñar_desde_contexto_material(
     material_nombre = material_config.get("nombre", "Material")
 
     print(f"\n{'─'*50}")
-    print(f"  CAPA 1 · Agente 3 — {material_nombre}  [A:{MODEL_BRAND_ANALYSIS} / B:{MODEL_DESIGN_CONCEPTS}]")
+    print(f"  CAPA 1 · Agente 3 — {material_nombre}  [B:{MODEL_DESIGN_CONCEPTS}]")
     print(f"  Pedido: {id_pedido}")
-    print(f"  Modo: hormigón gris puro — Color Oracle y Firecrawl omitidos")
+    print(f"  Modo: hormigón gris puro — Brand Analysis, Color Oracle y Firecrawl omitidos")
     print(f"{'─'*50}")
 
-    # Color Oracle y Firecrawl omitidos en Agente 3:
-    # El trofeo es siempre hormigón gris monocromático — los colores de marca
-    # no se aplican al objeto físico, por lo que extraerlos es innecesario.
     brand_context["canonical_palette"] = []
-
-    # ── Brand Analysis ────────────────────────────────────────────────────────────
-    # Se mantiene para conocer: sector, tono de marca, estilo tipográfico del logo.
-    # Esta información guía la elección de la FORMA escultórica, no el color.
-    print("\n[A] Brand Analysis (identidad visual — sin colores)...")
-    brand_analysis = _llamada_brand_analysis(pedido, brand_context)
-
-    brand_name = brand_analysis.get("brand_name", "—")
-    brand_tone = brand_analysis.get("brand_tone", "—")
-    typo       = brand_analysis.get("typography", {})
-    print(f"  Marca: {brand_name} · Tono: {brand_tone} · Fuente: {typo.get('font_name','—')}")
+    brand_analysis: dict = {}
 
     # ── Design Concepts — Formas Escultóricas (3 propuestas) ─────────────────────
     print(f"\n[B] Design Concepts — Formas {material_nombre} (3 propuestas)...")

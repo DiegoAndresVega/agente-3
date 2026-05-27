@@ -24,6 +24,7 @@ from scripts.config import (
     REPLICATE_LORA_MODEL,
     LORA_TRIGGER_WORD,
     USE_LORA,
+    USE_GPT_EDIT,
 )
 
 
@@ -104,15 +105,11 @@ Output quality:
 # Flux interpreta cualquier mención de "engraving" o "text" como instrucción
 # de generar caracteres en la imagen. Este prompt genera la forma limpia.
 _PROMPT_BASE_TROFEO_LORA = """\
-Photorealistic studio product photography of a sculptural award trophy made of REAL CAST CONCRETE.
-Material must look like authentic raw concrete: dense grey cement with visible fine aggregate particles, \
-subtle natural porosity, soft micro-roughness on all surfaces, matte non-reflective finish, \
-slight natural tonal variation in the grey. \
-The texture must feel physically real and heavy — NOT smooth clay, NOT ceramic, NOT plastic, NOT CG render. \
-Single monolithic concrete sculptural form on grey background #d7d7d7. \
+Studio product photography of a sculptural award trophy. \
+Single monolithic sculptural form on neutral grey background #d7d7d7. \
 Soft diffused studio lighting, clean contact shadow at base. Portrait orientation. \
 No text, no letters, no numbers, no words, no markings anywhere on the surface. \
-Photorealistic, sharp focus, premium concrete sculpture photography.\
+Sharp focus, clean composition, premium trophy photography.\
 """
 
 
@@ -154,9 +151,12 @@ def _construir_prompt_hormigon_acero(
             "No applied lettering, no color fill in the engraving — concrete grey only. "
         )
 
-    # Para el LoRA: usar prompt base simplificado sin referencias a grabado/texto
-    # Para gpt-image-1: usar el prompt base completo (mejor seguimiento de instrucciones)
-    base = _PROMPT_BASE_TROFEO_LORA if USE_LORA else _PROMPT_BASE_TROFEO
+    from scripts.prompts_manager import cargar_prompts
+    _pm = cargar_prompts()
+    if USE_LORA:
+        base = _pm.get("prompt_base_trofeo_lora") or _PROMPT_BASE_TROFEO_LORA
+    else:
+        base = _PROMPT_BASE_TROFEO
 
     return (
         f"{base}\n\n"
@@ -204,7 +204,7 @@ def _aplicar_textura_y_logo(
         composite.paste(logo_panel,  (SIDE, 0))
         ImageDraw.Draw(composite).line([(SIDE, 0), (SIDE, SIDE)], fill=(80, 80, 80), width=3)
 
-        prompt = (
+        _DEFAULT_PROMPT_TEXTURA = (
             "This image has two panels: LEFT = sculptural trophy, RIGHT = brand logo symbol. "
             "Apply TWO changes to the LEFT trophy and output it filling the FULL FRAME: "
             "(1) Convert surface to authentic raw concrete — dense grey portland cement, "
@@ -217,6 +217,8 @@ def _aplicar_textura_y_logo(
             "Do NOT add text, words, letters, numbers or floating elements anywhere. "
             "Output: ONLY the trophy filling the entire frame, clean grey studio background."
         )
+        from scripts.prompts_manager import cargar_prompts
+        prompt = cargar_prompts().get("prompt_textura_logo") or _DEFAULT_PROMPT_TEXTURA
 
         buf = BytesIO()
         composite.save(buf, format="PNG")
@@ -242,21 +244,26 @@ def _aplicar_textura_y_logo(
         return _aplicar_textura_hormigon(img)
 
 
+_DEFAULT_PROMPT_TEXTURA_HORMIGON = (
+    "This sculptural trophy has a smooth surface. "
+    "Convert the material to authentic raw concrete: dense grey portland cement "
+    "with visible fine aggregate particles, natural porosity, soft micro-roughness, "
+    "matte non-reflective finish. Preserve the EXACT same shape — only change texture. "
+    "No text, no logos, no new elements."
+)
+
+
 def _aplicar_textura_hormigon(img: Image.Image) -> Image.Image:
     """
-    Llamada 1 de gpt-image-1 edit: convierte la textura suave del LoRA
+    Llamada gpt-image-1 edit: convierte la textura suave del LoRA
     en hormigón real sin cambiar la forma del trofeo.
     """
     try:
+        from scripts.prompts_manager import cargar_prompts
+        prompt = cargar_prompts().get("prompt_textura_hormigon") or _DEFAULT_PROMPT_TEXTURA_HORMIGON
+
         w, h = img.size
         scaled  = img.resize((1024, 1024), Image.LANCZOS)
-        prompt  = (
-            "This sculptural trophy has a smooth surface. "
-            "Convert the material to authentic raw concrete: dense grey portland cement "
-            "with visible fine aggregate particles, natural porosity, soft micro-roughness, "
-            "matte non-reflective finish. Preserve the EXACT same shape — only change texture. "
-            "No text, no logos, no new elements."
-        )
         buf = BytesIO()
         scaled.save(buf, format="PNG")
         kb = buf.tell() // 1024
@@ -408,20 +415,13 @@ def generar_trofeo(
         img = _generar_con_lora(pid, prompt, ancho, alto, color_principal, concepto)
         print(f"  ║  ✓ Imagen LoRA: {img.size[0]}×{img.size[1]}px")
 
-        print(f"  ╠── PASO 2+3: gpt-image-1 edit → textura + logo (una sola llamada) ──")
-        logo_b64  = brand_context.get("logo_b64", "")
-        logo_type = brand_context.get("logo_type", "image/png")
-        brand_nm  = (brand_analysis or {}).get("brand_name", "") or \
-                    concepto.get("award_text", {}).get("subtitle", "")
-        if logo_b64 and brand_nm:
-            print(f"  ║  Logo disponible: ✓  |  Marca: {brand_nm}")
-            img = _aplicar_textura_y_logo(img, logo_b64, logo_type, brand_nm)
-        else:
-            razon = "sin logo_b64" if not logo_b64 else "sin brand_name"
-            print(f"  ║  ✗ Sin logo ({razon}) — solo textura")
+        if USE_GPT_EDIT:
+            print(f"  ╠── PASO 2: gpt-image-1 edit → textura hormigón ──────")
             img = _aplicar_textura_hormigon(img)
+        else:
+            print(f"  ╠── PASO 2: suspendido (USE_GPT_EDIT=false) ────────")
+            print(f"  ║  Imagen LoRA es el resultado final")
 
-        print(f"  ╠── PASO 4: texto omitido (forma + textura + logo son suficientes) ─")
         print(f"  ╚══ P{pid} COMPLETADO ══════════════════════════════════\n")
         return img
     else:
@@ -487,8 +487,8 @@ def _generar_con_lora(pid, prompt: str, ancho: int, alto: int,
                     "aspect_ratio":            aspect,
                     "num_outputs":             1,
                     "num_inference_steps":     28,
-                    "guidance_scale":          3.5,
-                    "lora_scale":              0.8,
+                    "guidance_scale":          6,
+                    "lora_scale":              0.4,
                     "output_format":           "jpg",
                     "output_quality":          95,
                     "disable_safety_checker":  True,

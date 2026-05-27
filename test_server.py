@@ -142,6 +142,166 @@ def feedback():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/mejorar", methods=["POST"])
+def mejorar():
+    """
+    Recibe feedback en lenguaje natural, llama a Claude para ajustar los prompts
+    del programa y guarda los cambios en prompts.json.
+    Los cambios son permanentes: afectan todas las generaciones futuras.
+    """
+    try:
+        from scripts.prompts_manager import (
+            cargar_prompts, guardar_prompts, cargar_historial, PROMPT_KEYS
+        )
+        from scripts.capa1_ia import (
+            PROMPT_B_HORMIGON_ACERO, _llamar_claude,
+            MODEL_DESIGN_CONCEPTS,
+        )
+        from scripts.capa_imagen import _PROMPT_BASE_TROFEO_LORA
+
+        data     = request.get_json()
+        feedback = (data or {}).get("feedback", "").strip()
+        if not feedback:
+            return jsonify({"error": "El campo feedback está vacío"}), 400
+
+        # Prompts actuales (guardados o defaults)
+        actuales = cargar_prompts()
+        prompts_activos = {
+            "prompt_b_hormigon_acero": actuales.get("prompt_b_hormigon_acero") or PROMPT_B_HORMIGON_ACERO,
+            "prompt_base_trofeo_lora": actuales.get("prompt_base_trofeo_lora") or _PROMPT_BASE_TROFEO_LORA,
+            "prompt_textura_logo": actuales.get("prompt_textura_logo") or (
+                "This image has two panels: LEFT = sculptural trophy, RIGHT = brand logo symbol. "
+                "Apply TWO changes to the LEFT trophy and output it filling the FULL FRAME..."
+            ),
+        }
+
+        descripciones = {k: v["descripcion"] for k, v in PROMPT_KEYS.items()}
+
+        system_prompt = """\
+Eres un ingeniero de prompts especializado en generadores de trofeos de hormigón monolítico.
+Tu tarea: ajustar los prompts del programa basándote en el feedback del responsable.
+
+REGLAS:
+1. Solo modifica los prompts estrictamente necesarios para atender el feedback.
+2. Mantén el idioma, estructura y longitud similar del prompt original.
+3. No elimines instrucciones de seguridad (no floating elements, no text, etc.).
+4. Si el feedback es ambiguo, interpreta la mejora más conservadora posible.
+5. Devuelve SOLO un JSON válido con los prompts modificados. No incluyas los que no cambien.
+
+Formato de respuesta:
+{
+  "cambios": ["descripción breve del cambio 1", "descripción breve del cambio 2"],
+  "prompts": {
+    "clave_del_prompt": "nuevo texto del prompt completo"
+  }
+}\
+"""
+
+        user_content = (
+            f"FEEDBACK DEL RESPONSABLE:\n{feedback}\n\n"
+            f"PROMPTS ACTUALES DEL PROGRAMA:\n\n"
+            + "\n\n".join(
+                f"--- {PROMPT_KEYS[k]['label']} ({k}) ---\n"
+                f"Función: {descripciones[k]}\n"
+                f"Texto actual:\n{v}"
+                for k, v in prompts_activos.items()
+            )
+        )
+
+        print(f"\n[/mejorar] Feedback recibido: {feedback[:80]}...")
+        print(f"[/mejorar] Llamando Claude para ajustar prompts...")
+
+        resultado = _llamar_claude(
+            [{"role": "user", "content": user_content}],
+            system_prompt,
+            "MejorarPrompts",
+            temperatura=0.3,
+            model=MODEL_DESIGN_CONCEPTS,
+        )
+
+        if not isinstance(resultado, dict) or "prompts" not in resultado:
+            return jsonify({"error": "Claude no devolvió un formato válido", "raw": str(resultado)}), 500
+
+        nuevos = resultado["prompts"]
+        cambios = resultado.get("cambios", [])
+
+        # Validar que las claves sean conocidas
+        claves_validas = set(PROMPT_KEYS.keys())
+        nuevos_filtrados = {k: v for k, v in nuevos.items() if k in claves_validas and v}
+
+        if not nuevos_filtrados:
+            return jsonify({"ok": False, "mensaje": "Claude no propuso cambios para este feedback."}), 200
+
+        # Guardar: merge con los actuales
+        prompts_guardados = {**actuales, **nuevos_filtrados}
+        guardar_prompts(prompts_guardados, motivo=feedback[:200])
+
+        print(f"[/mejorar] ✓ Prompts actualizados: {list(nuevos_filtrados.keys())}")
+        return jsonify({
+            "ok":        True,
+            "cambios":   cambios,
+            "modificados": list(nuevos_filtrados.keys()),
+            "labels":    {k: PROMPT_KEYS[k]["label"] for k in nuevos_filtrados},
+            "historial": cargar_historial(),
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/prompts", methods=["GET"])
+def ver_prompts():
+    """Devuelve los prompts activos, defaults del código e historial."""
+    from scripts.prompts_manager import cargar_prompts, cargar_historial, PROMPT_KEYS
+    from scripts.capa1_ia import PROMPT_B_HORMIGON_ACERO
+    from scripts.capa_imagen import _PROMPT_BASE_TROFEO_LORA, _DEFAULT_PROMPT_TEXTURA_HORMIGON
+
+    actuales  = cargar_prompts()
+    defaults  = {
+        "prompt_b_hormigon_acero":   PROMPT_B_HORMIGON_ACERO,
+        "prompt_base_trofeo_lora":   _PROMPT_BASE_TROFEO_LORA,
+        "prompt_textura_hormigon":   _DEFAULT_PROMPT_TEXTURA_HORMIGON,
+    }
+    # Valores activos = guardados si existen, sino defaults del código
+    activos = {k: actuales.get(k) or defaults[k] for k in defaults}
+
+    return jsonify({
+        "prompts":  activos,
+        "keys":     PROMPT_KEYS,
+        "defaults": defaults,
+        "historial": cargar_historial(),
+    })
+
+
+@app.route("/prompts/guardar", methods=["POST"])
+def guardar_prompts_directo():
+    """Guarda prompts editados directamente (sin pasar por Claude)."""
+    from scripts.prompts_manager import guardar_prompts, cargar_historial, PROMPT_KEYS
+    data    = request.get_json() or {}
+    nuevos  = data.get("prompts", {})
+    motivo  = data.get("motivo", "Edición manual desde el formulario")
+    # Solo aceptar claves conocidas y valores no vacíos
+    filtrados = {k: v for k, v in nuevos.items() if k in PROMPT_KEYS and v and v.strip()}
+    if not filtrados:
+        return jsonify({"ok": False, "mensaje": "No hay prompts válidos para guardar."}), 400
+    guardar_prompts(filtrados, motivo=motivo)
+    return jsonify({
+        "ok":        True,
+        "mensaje":   f"Guardados {len(filtrados)} prompt(s).",
+        "historial": cargar_historial(),
+    })
+
+
+@app.route("/prompts/revertir", methods=["POST"])
+def revertir_prompts():
+    """Revierte al estado anterior de los prompts."""
+    from scripts.prompts_manager import revertir_ultimo, cargar_historial
+    ok, mensaje = revertir_ultimo()
+    return jsonify({"ok": ok, "mensaje": mensaje, "historial": cargar_historial()})
+
+
 @app.route("/generar", methods=["POST"])
 def generar():
     logo_tmp_path = None
@@ -156,8 +316,7 @@ def generar():
         pdf_file  = request.files.get("brandbook")
         _tiene_pdf = pdf_file and pdf_file.filename != ""
 
-        if not _tiene_logo and not url_input and not _tiene_pdf:
-            return jsonify({"error": "Proporciona al menos el logo, la URL corporativa o el brandbook"}), 400
+        # Sin validación de assets — permitido enviar vacío para pruebas
 
         pdf_bytes = pdf_file.read() if _tiene_pdf else None
 
@@ -310,7 +469,7 @@ def generar():
 if __name__ == "__main__":
     from scripts.config import (
         MODEL_BRAND_ANALYSIS, MODEL_DESIGN_CONCEPTS,
-        IMAGE_QUALITY, USE_DALLE, USE_LORA,
+        IMAGE_QUALITY, USE_DALLE, USE_LORA, USE_GPT_EDIT,
     )
 
     errores = []
@@ -343,8 +502,9 @@ if __name__ == "__main__":
     print(f"\n  Modelos:")
     print(f"    Brand Analysis  : {MODEL_BRAND_ANALYSIS}")
     print(f"    Design Concepts : {MODEL_DESIGN_CONCEPTS}")
-    _img_info = f"gpt-image-1 ({IMAGE_QUALITY})" if USE_DALLE else "desactivado — usando PIL"
-    print(f"    Generación img  : {_img_info}")
+    _lora_info = "LoRA (Replicate)" if USE_LORA else f"gpt-image-1 ({IMAGE_QUALITY})"
+    _edit_info = " + gpt edit textura/logo" if (USE_LORA and USE_GPT_EDIT) else (" [gpt edit suspendido]" if USE_LORA else "")
+    print(f"    Generación img  : {_lora_info}{_edit_info}")
 
     print(f"\n  Material por defecto: {MATERIAL_ID_DEFAULT}")
 

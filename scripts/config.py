@@ -3,9 +3,10 @@ Configuración centralizada de modelos y feature flags del Agente 3.
 Todos los valores pueden sobreescribirse con variables de entorno.
 
 Coste orientativo por pedido (3 trofeos):
-    Demo/pruebas  USE_DALLE=false              ~$0.03  (solo Claude)
-    USE_LORA=true  LoRA + gpt edit             ~$0.09/trofeo
-    USE_LORA=false gpt-image-1 directo         ~$0.042/trofeo
+    Demo/pruebas   USE_DALLE=false              ~$0.03  (solo Claude)
+    USE_LORA=true  LoRA solamente               ~$0.009/trofeo
+    USE_LORA=true  + USE_GPT_EDIT=true          ~$0.09/trofeo (añade textura+logo)
+    USE_LORA=false gpt-image-1 directo          ~$0.042/trofeo
 """
 import os
 
@@ -30,15 +31,15 @@ FIRECRAWL_API_KEY     = os.getenv("FIRECRAWL_API_KEY", "")
 IMAGE_MODEL_OPENAI = os.getenv("IMAGE_MODEL_OPENAI", "gpt-image-1")
 IMAGE_QUALITY      = os.getenv("IMAGE_QUALITY", "medium")  # "low" | "medium" | "high"
 
-# LoRA (Replicate Flux) — dataset saawdtrophy, 30 imágenes, 1500 steps
-# Entrenado: 2026-05-20 · trigger: saawdtrophy · coste ~$0.003/img
+# LoRA (Replicate Flux) — dataset saawdtrophy, trigger: saawdtrophy
+# Entrenado: 2026-05-27 · modelo: diegoandresvega/trofeos
 REPLICATE_LORA_MODEL = os.getenv(
     "REPLICATE_LORA_MODEL",
-    "diegoandresvega/saawdtrophy-lora-v3:c8794783be4354357f0ef5fb89fb8a3987efe5865dd07b692924ea5f56ff1f62"
+    "diegoandresvega/trofeos:748ed324b91f3d9bf5ce01a01b307d1cc772d0ee29fea2188e49294eda564d75"
 )
 LORA_TRIGGER_WORD = os.getenv("LORA_TRIGGER_WORD", "saawdtrophy")
 
-# USE_LORA=true  → Replicate LoRA (forma) + gpt-image-1 edit (textura+logo)
+# USE_LORA=true  → Replicate LoRA genera la forma del trofeo
 # USE_LORA=false → gpt-image-1 generate directamente
 USE_LORA = os.getenv("USE_LORA", "false").lower() == "true"
 
@@ -47,3 +48,7 @@ USE_LORA = os.getenv("USE_LORA", "false").lower() == "true"
 
 # USE_DALLE=false → PIL fallback sin coste (solo para pruebas locales)
 USE_DALLE = os.getenv("USE_DALLE", "true").lower() == "true"
+
+# USE_GPT_EDIT=true  → aplica textura hormigón + graba logo con gpt-image-1 edit
+# USE_GPT_EDIT=false → imagen del LoRA es el resultado final (suspendido por defecto)
+USE_GPT_EDIT = os.getenv("USE_GPT_EDIT", "true").lower() == "true"
